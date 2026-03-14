@@ -5,7 +5,6 @@
 
   ![Windows](https://img.shields.io/badge/Windows-11%20%2F%2010-0078D4?logo=windows)
   ![PowerShell](https://img.shields.io/badge/PowerShell-5.1+-5391FE?logo=powershell)
-  ![License](https://img.shields.io/badge/License-MIT-green)
 </div>
 
 ---
@@ -52,6 +51,3 @@
 - Windows 10 / 11
 - PowerShell 5.1 이상 (기본 내장)
 
-## 📄 라이선스
-
-MIT License
