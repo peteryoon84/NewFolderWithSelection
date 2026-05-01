@@ -1,0 +1,534 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="Boggle">
+<meta name="theme-color" content="#0f0c29">
+<title>Boggle</title>
+<style>
+*{box-sizing:border-box;-webkit-tap-highlight-color:transparent;-webkit-touch-callout:none;-webkit-user-select:none;user-select:none;margin:0;padding:0}
+:root{
+  --safe-t:env(safe-area-inset-top,0px);
+  --safe-b:env(safe-area-inset-bottom,0px);
+  --safe-l:env(safe-area-inset-left,0px);
+  --safe-r:env(safe-area-inset-right,0px);
+}
+html,body{height:100%;height:-webkit-fill-available;overflow:hidden}
+body{
+  background:linear-gradient(160deg,#0f0c29 0%,#302b63 50%,#24243e 100%);
+  font-family:-apple-system,BlinkMacSystemFont,'SF Pro Display',sans-serif;
+  color:#fff;
+  display:flex;
+  flex-direction:column;
+  align-items:center;
+}
+.wrap{
+  display:flex;
+  flex-direction:column;
+  align-items:center;
+  width:100%;
+  max-width:430px;
+  height:100vh;
+  height:-webkit-fill-available;
+  padding:calc(var(--safe-t) + 12px) calc(var(--safe-l) + 14px) calc(var(--safe-b) + 10px) calc(var(--safe-r) + 14px);
+  gap:10px;
+}
+
+/* Header */
+.hdr{display:flex;justify-content:space-between;align-items:center;width:100%}
+.stat-box{
+  background:rgba(255,255,255,.08);
+  border:1px solid rgba(255,255,255,.12);
+  border-radius:14px;
+  padding:6px 14px;
+  text-align:center;
+  min-width:72px;
+  backdrop-filter:blur(8px);
+}
+.stat-lbl{font-size:10px;opacity:.6;text-transform:uppercase;letter-spacing:1.2px;margin-bottom:2px}
+.stat-val{font-size:26px;font-weight:700;line-height:1}
+#scoreVal{color:#f472b6}
+#timerVal{color:#38bdf8}
+#timerVal.urgent{color:#f87171;animation:pulse .6s ease infinite}
+@keyframes pulse{0%,100%{transform:scale(1)}50%{transform:scale(1.08)}}
+.logo{
+  font-size:22px;font-weight:900;letter-spacing:3px;
+  background:linear-gradient(90deg,#f472b6,#818cf8,#38bdf8);
+  -webkit-background-clip:text;-webkit-text-fill-color:transparent;
+}
+
+/* Word display */
+.word-bar{
+  width:100%;
+  background:rgba(255,255,255,.06);
+  border:2px solid rgba(255,255,255,.1);
+  border-radius:18px;
+  padding:10px 16px;
+  min-height:52px;
+  display:flex;align-items:center;justify-content:center;
+  font-size:26px;font-weight:800;letter-spacing:5px;
+  transition:border-color .2s,background .2s;
+  position:relative;
+}
+.word-bar.valid{border-color:#4ade80;background:rgba(74,222,128,.1);color:#4ade80}
+.word-bar.dupe{border-color:#fbbf24;background:rgba(251,191,36,.1);color:#fbbf24}
+.word-bar.bad{border-color:#f87171;background:rgba(248,113,113,.1);animation:shake .3s}
+.word-bar .hint{font-size:13px;opacity:.4;font-weight:400;letter-spacing:1px}
+@keyframes shake{0%,100%{transform:translateX(0)}25%{transform:translateX(-6px)}75%{transform:translateX(6px)}}
+
+/* Board */
+.board-wrap{
+  width:100%;
+  position:relative;
+}
+.board{
+  display:grid;
+  grid-template-columns:repeat(4,1fr);
+  gap:8px;
+  width:100%;
+  aspect-ratio:1;
+  padding:10px;
+  background:rgba(255,255,255,.04);
+  border-radius:22px;
+  border:1px solid rgba(255,255,255,.08);
+}
+.cell{
+  background:linear-gradient(145deg,rgba(255,255,255,.14),rgba(255,255,255,.04));
+  border-radius:14px;
+  display:flex;flex-direction:column;align-items:center;justify-content:center;
+  font-size:clamp(22px,7vw,30px);
+  font-weight:900;
+  text-transform:uppercase;
+  border:2px solid rgba(255,255,255,.08);
+  position:relative;
+  aspect-ratio:1;
+  touch-action:none;
+  transition:transform .1s,background .15s,border-color .15s,box-shadow .15s;
+  cursor:pointer;
+}
+.cell .pts{
+  position:absolute;bottom:3px;right:6px;
+  font-size:9px;opacity:.45;font-weight:500;
+}
+.cell.on-path{
+  background:linear-gradient(145deg,#7c3aed,#4f1fb6);
+  border-color:rgba(255,255,255,.25);
+}
+.cell.selected{
+  background:linear-gradient(145deg,#db2777,#9d174d);
+  border-color:rgba(255,255,255,.4);
+  transform:scale(.93);
+  box-shadow:0 0 18px rgba(219,39,119,.55);
+}
+.cell.found-flash{animation:pop .25s ease}
+@keyframes pop{0%{transform:scale(1)}50%{transform:scale(1.12)}100%{transform:scale(1)}}
+
+/* SVG path line */
+.path-svg{
+  position:absolute;inset:0;
+  width:100%;height:100%;
+  pointer-events:none;
+  overflow:visible;
+}
+.path-line{fill:none;stroke:rgba(219,39,119,.45);stroke-width:5;stroke-linecap:round;stroke-linejoin:round;transition:d .05s}
+
+/* Found words */
+.found-section{width:100%;flex:1;overflow:hidden;display:flex;flex-direction:column;min-height:0}
+.found-title{font-size:11px;opacity:.5;text-transform:uppercase;letter-spacing:1.2px;margin-bottom:6px}
+.found-list{
+  display:flex;flex-wrap:wrap;gap:6px;
+  overflow-y:auto;flex:1;
+  padding-bottom:4px;
+  -webkit-overflow-scrolling:touch;
+}
+.found-list::-webkit-scrollbar{display:none}
+.word-chip{
+  background:rgba(74,222,128,.12);
+  border:1px solid rgba(74,222,128,.3);
+  border-radius:20px;
+  padding:4px 11px;
+  font-size:13px;color:#4ade80;
+  white-space:nowrap;
+  animation:chipIn .25s ease;
+}
+@keyframes chipIn{from{opacity:0;transform:scale(.7)}to{opacity:1;transform:scale(1)}}
+
+/* Button */
+.btn{
+  width:100%;
+  background:linear-gradient(135deg,#db2777,#7c3aed);
+  border:none;border-radius:16px;
+  padding:14px;font-size:16px;font-weight:700;color:#fff;
+  cursor:pointer;letter-spacing:.5px;
+  box-shadow:0 4px 20px rgba(219,39,119,.35);
+  transition:transform .15s,box-shadow .15s;
+  flex-shrink:0;
+}
+.btn:active{transform:scale(.97);box-shadow:0 2px 10px rgba(219,39,119,.2)}
+
+/* Score float */
+.float-score{
+  position:fixed;pointer-events:none;
+  font-size:26px;font-weight:900;color:#4ade80;
+  z-index:99;text-shadow:0 2px 12px rgba(74,222,128,.6);
+  animation:floatUp .9s ease forwards;
+}
+@keyframes floatUp{0%{opacity:1;transform:translateY(0) scale(1)}100%{opacity:0;transform:translateY(-70px) scale(1.4)}}
+
+/* Overlay */
+.overlay{
+  position:fixed;inset:0;
+  background:rgba(0,0,0,.82);
+  display:flex;align-items:center;justify-content:center;
+  z-index:200;
+  backdrop-filter:blur(14px);
+  -webkit-backdrop-filter:blur(14px);
+}
+.overlay.off{display:none}
+.modal{
+  background:linear-gradient(160deg,#1e1b4b,#312e81);
+  border-radius:28px;
+  padding:38px 28px 32px;
+  text-align:center;
+  width:88%;max-width:340px;
+  border:1px solid rgba(255,255,255,.1);
+  box-shadow:0 30px 80px rgba(0,0,0,.5);
+}
+.modal-logo{
+  font-size:36px;font-weight:900;letter-spacing:4px;
+  background:linear-gradient(90deg,#f472b6,#818cf8,#38bdf8);
+  -webkit-background-clip:text;-webkit-text-fill-color:transparent;
+  margin-bottom:4px;
+}
+.modal-sub{font-size:14px;opacity:.65;line-height:1.7;margin:14px 0 10px}
+.modal-rules{
+  font-size:12px;opacity:.5;line-height:2;
+  background:rgba(255,255,255,.05);
+  border-radius:12px;padding:10px 14px;
+  margin-bottom:22px;
+  text-align:left;
+}
+.modal-result{margin:6px 0 20px;display:none}
+.modal-pts{font-size:64px;font-weight:900;color:#4ade80;line-height:1}
+.modal-words-found{font-size:14px;opacity:.65;margin-top:6px}
+.modal-best{font-size:13px;color:#fbbf24;margin-top:4px}
+.modal-btn{
+  width:100%;
+  background:linear-gradient(135deg,#db2777,#7c3aed);
+  border:none;border-radius:16px;
+  padding:15px;font-size:17px;font-weight:700;color:#fff;
+  cursor:pointer;letter-spacing:.5px;
+  box-shadow:0 4px 20px rgba(219,39,119,.4);
+}
+.modal-btn:active{transform:scale(.97)}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <div class="hdr">
+    <div class="stat-box"><div class="stat-lbl">점수</div><div class="stat-val" id="scoreVal">0</div></div>
+    <div class="logo">BOGGLE</div>
+    <div class="stat-box"><div class="stat-lbl">시간</div><div class="stat-val" id="timerVal">3:00</div></div>
+  </div>
+
+  <div class="word-bar" id="wordBar"><span class="hint">글자를 드래그하세요</span></div>
+
+  <div class="board-wrap">
+    <div class="board" id="board"></div>
+    <svg class="path-svg" id="pathSvg" xmlns="http://www.w3.org/2000/svg">
+      <polyline class="path-line" id="pathLine" points=""/>
+    </svg>
+  </div>
+
+  <div class="found-section">
+    <div class="found-title">찾은 단어 · <span id="wordCnt">0</span>개</div>
+    <div class="found-list" id="foundList"></div>
+  </div>
+
+  <button class="btn" id="newBtn">새 게임</button>
+</div>
+
+<!-- Overlay -->
+<div class="overlay" id="overlay">
+  <div class="modal">
+    <div class="modal-logo">BOGGLE</div>
+    <div class="modal-sub" id="modalSub">인접한 글자를 연결해<br>영어 단어를 만드세요!</div>
+    <div class="modal-rules" id="modalRules">
+      ✦ 3글자 이상의 단어<br>
+      ✦ 대각선 연결 가능<br>
+      ✦ 같은 칸은 한 번만<br>
+      ✦ 손가락 드래그로 선택
+    </div>
+    <div class="modal-result" id="modalResult">
+      <div class="modal-pts" id="modalPts">0</div>
+      <div class="modal-words-found" id="modalWordsFnd"></div>
+      <div class="modal-best" id="modalBest"></div>
+    </div>
+    <button class="modal-btn" id="startBtn">게임 시작</button>
+  </div>
+</div>
+
+<script>
+// ─── DICTIONARY ──────────────────────────────────────────────────────────────
+// ~4000 common English words suitable for Boggle (3–8 letters)
+const W = new Set(`ace act add age ago aid aim air ale all amp and ant any ape apt arc are ark arm art ash ask ate awe axe aye baa bad bag ban bar bat bay bed bet bid big bin bit bog boo bow box boy bud bug bun bus but buy cab can cap car cat cod cog cop cot cow cry cub cup cur cut dab dad dam den dew did dig dim din dip doe dog don dot due dug ear eat egg ego elf elk elm end era eve ewe eye fab fad fan far fat fed fen few fib fig fin fit fix fly fog for fox fro fun fur gab gag gap gas gel gem get gig gin god got gum gun gut guy had ham has hat hay hen her hew hex hid him hip his hit hob hod hog hop hot how hub hug hum hut ice icy ill imp ink inn ion ire ivy jab jag jam jar jaw jay jet jig job jot joy jug jut keg kid kin kit lab lad lag lam lap law lax lay led leg lid lip lit lob log lot low lug mad man map mar mat maw may med men met mew mid mob mod mop mud mug nab nag nap net new nil nip nob nod nor not nub nun nut oak oaf odd ode off oft oil old one opt orb ore out owe owl own pad pal pan par pat paw pay pea peg pen per pet pew pie pig pin pit ply pod pop pot pow pub pug pun pup put rag ram ran rap rat raw ray red ref rep rev rib rid rig rim rip rob rod rot row rub rug rum run rut rye sad sag sap sat saw say sea set sew shy sin sip sit ski sky sly sob sod son sop sot sow spa spy sty sub sue sum sun sup tab tan tap tar tax tea ten tie til tin tip toe ton too top toy try tub tug tun two use van vat via vim vow wag wan war was wax web wed wig win wit woe won woo wow yak yam yap yaw yep yet yew yen you zap zip zoo abed abet able ably abut aces ache acid acme acre acts adds aged ager ages agog ague aids aims airs airy akin aloe also alto amok amps ands anew anti ants apex apes arch arcs area aria arid army arty asks atop avid awed awes awls axed axes axis back bail bait bake bald bale balk ball balm band bane bang bank barb bare bark barn bars base bash bask bass bath bats baud bays bead beak beam bean bear beat beck beef been beer bees beet bell belt bend best beta bias bide bike bile bind bite bled blow blue blur boat bode bold bolt bond bone book boom boon boot bore born boss brim brow buff bulb bull bump bunk buoy burg burp byte cafe cage calm came cane cape card care carp cart case cash cast cave cede cell chap char chat chef chew chip chop chow clad clam clan clap claw clay clip clod clop club clue coil cola cold colt coma come cone cool cope cord core corm corn cosh cost crab crew crop crow cure curl daft dale dame damp dare dark darn dart dash date daub dawn days dead deaf deal dean dear debt deck deed deep deer deft deli dens dent digs disc dish disk dive dock does dole dome dorm dose dote dove down drab drag dram draw drew drip drop drug drum dual dump dupe dusk dust each earl earn ease east easy edge edit else emit envy epic even ever evil exit fail fair fall fame fare farm fast fate fawn fear feat feet fell felt fend fern fest feta feud file fill film find fine fire firm fish fist five flag flan flap flat flaw fled flew flex flip flit flog flop flow foam fold folk fond font food fool foot ford fore fork form fort foul four fowl fray free fret frog from fuel full fume fund furl fury fuss gale gall game gape garb gash gasp gave gaze gear geld gibe gild gill gist give glee glib glob glop glow glue glum goad goal goat goes gold golf gone gong good gore gown grab grad gram gray grew grey grid grin grip grit grow grub gulf gull gulp hack hail hair half hall halt hand hang hard hare harm harp hart hash hasp hate haul have hawk haze hazy head heal heap heat heel helm help herd here hide high hill hilt hind hire hoax hobo hold hole home hood hook hoop hope horn host hour howl hulk hull hung hunt hurt husk hymn idea idle inch into isle itch item jade jail jinx jive jolt jowl jump junk jury just keen keep kelp kept kick kind king kiss kite knob knot lack lace lame land lane lard lark lash lass last late laud lava lawn lazy lead leaf leak lean leap leer left lend lens lest levy liar lice lick lied lieu life lift like lime limp line link lint lion list live load loaf loam loan loft lore lorn loss lost loud lour lout lure lurk lust mace made maid mail main make mall mane mare mark maze meal mean meld melt menu mesh mist moan mode mole monk mood moor more moss most mote moth move much muck mull murk muse musk must myth nape nave navy near neat neck need newt next nice nick node none noon norm note noun nude null numb oath oboe once only onto open opus orca oven over owed pace pact page paid pair pale pall palm pang pass past path pave pawn peak peal peen peer pelt perk pest pick pied pier pile pill pine pith pity plan play plot plow plug plum plus poet poke poll pond pool poor port post pour pout pray prow puck pull pulp pump punk pyre race rack raft rage raid rail rain rake ramp rang rank rant rape rare rash rate rave read real ream reap reel rein rely rend rent rest rice rich rick ride rife rime ring rink riot rise risk road roam roar robe rock rode role roll roof rook room rope rose rout rove rude ruff rule rump rune rung ruse rush rust sack saga sage said sail sake sale salt same sand sane sang sank sash save seam seep self sell shed shin ship shoe shop shot show shun shut sick side sift sign silk sill silo silt sire site size skew skid skim skin skip slab slap slat slew slim slip slob slop slot slow slug slum slur smug snag snap snob snub soak soap soar sock soil sole some song soon sore sort soul soup sour span spar spec sped spin spit spot such suet suit sulk sump sung sunk sure surf tale tall tame tamp tang tape taps tare tarp task taut team tear tell tend tens tern text than that them then tide tied tier till tilt time tine ting tint tire toil told toll tome tong tone took tool tore torn tort tote tour town tram trap trim trio trip trod trot trow true tube tuck tuft tugs turf turn tusk twin type ugly unit upon urge vale vane vast veil vein vent vest veto view vile vine viol void vole vote wade wail wake walk wall wand want ward ware warm wart wave wean wear weed week weld well welt went were whet whim wick wide wile will wilt wine wing wink wire wish wisp with wolf womb wont wood woof wool word wore worm worn writ yell your yore zeal zone zoom abode abhor abide abort above abuzz abyss acorn acrid acute after again agape agree ahead alarm album alder alien align alive aloft along aloof altar alter amaze amble amino ample amuse angel angle angry annex annoy antic apple apply apron arise armed aroma array aside askew assay atone attic audio audit augur avail avoid awash awoke azure bagel baste batty bayou beacon beard beige belly berth birch blaze bleat blend bless blind bliss block blood bloom blown blunt blush board boast boost booze boxer brain brand brave braun brawn bread break breed briar brick bride brief brine bring brisk broad broil brood brook broth brown brace brunt brush brute bulge bulky bully bunch bunny bugle buyer cabin camel candy chalk champ chant chasm cheap cheek chess child chimp choke chord chuck chump chunk claim clang clasp class clung coach coast cobalt cocoa comet comfy comma coral could count coven covet cozy craft crane crash creak cream creed creep crest crime crimp crisp crone cross crowd crown cruel crumb crust crypt cubic cumin curve cycle daddy dally dapper daunt death decay decoy delay demon depot derby deter devil dirty dizzy dodge dogma dolly dome doubt dowdy dowel dowry draft drain drape drear dress dried drift drink drive droll drone drool droop drove ducky dully dumpy dwarf dwell earns elbow elite empty enact ensue enter equal erect event exact excel extra fable facet fairy faith false fancy farce feast fetch fever fiber field filly finch first flake flame flank flare flask flick flier flock flood floor floss flout flower foggy folly force forge forgo forte found franc fraud freak fresh friar frisk front frost froth froze fruit fugue fully gamey gaudy gecko ghoul giddy girth given gizmo glare glide glint glory gloss glove gnash gnome golem goose grace grade grain grand grant grape grasp grass grate grave graze great greed green greet grief grind groan grody groin groom grope gross group grout grove growl gruff guide guile guise gusto hairy haste haute haven havoc haunt heavy hello hence herbs hinge hippo hitch hoard hoary hobby holly hoops horse hotel hover human humor hurdle hutch hyena idiot image imply infer inter irony issue joint joker jolly judge juice jumbo knack knave kneel knife knock knoll known label laced laden lapel large laugh leafy leaky leapt learn lease least legal lemon level light linen lingo liner lobby local lofty loony lotus louse lover lucid lucky lunar lusty magic maize manor maple march maser match mayor melee mercy merit merry micro might mimic mince mirth miser misty modal moldy money moody moose moral mound mount mouse mousy mucky muddy muggy mulch mummy musty myrrh nadir naive navel nerve never night noble noise noisy nomad notch novel nurse nymph occur often olive onset optic other otter ought oxbow ozone paced paddy paint pansy patsy pause penal penny perch petty phase phony picky pilot pinch pixel place plaid plain plank plant plate plaza plead pleat porch pound pouty press price prime print prior prize probe prone prude prune psalm pubic punch pupil purge pushy quake qualm query queue quiet quirk quota quote rabid radar rainy rally range rapid raven reach ready realm rebel recap refer regal reign relax repay repel repot rerun reuse ridge rifle rigor risky rival rivet roomy rowdy royal rumor rusty sadly saint salve sauce savvy scald scalp scant scare scene scone scoop scope score scout scrub seedy serve setup shake shale shame shank shape share sharp shawl sheen shelf shell shift shine shiny shire short shove showy shrub shrug siege sight silly sinew sissy sixth sixty skill skirt skulk skull slack slang slate slave slick slope slump smack small smear smell smelt smite smoke smoky snare sniff snore snort snout snowy soapy sorry south spade spare spark spawn speak speck spice spill spine spite splat split spoil spoke spoon sport spout spray spree spunk squad squat staid stain stair stale stamp stand stare start stash state stave steal steam steed steer stiff still stilt sting stink stint stock stomp stone stood stool store stork storm story stout stove strap straw stray strip strode strut stuck study stuff stump stung stunk stunt swab swamp swear sweat sweep sweet swell swipe swish swoop sword syrup tabby table talon taunt tawny tense tepid terra terse thorn throb throw thrum thump tiara tidal tiger tinge tired titan today token topaz torch totem towel tower toxic track trail train trait tramp trawl trend trial tribe tried trill troop trout truce truly trump trunk truss tryst tuber tulip twang tweed twice twill twine twist tying udder ultra uncle uncut unfit union unify unite urban usher utter valid valor valve vague vapor vault velvet verge verse vigor villa viral virus visor vital vodka voice vomit voter wager wagon waist watch water wedge weird whale wheat while whole whose wield windy witch witty woman women wordy world worth would wound wrath wrest wring wrung yeast yield young youth zealot`.split(/\s+/));
+
+// ─── BOGGLE DICE (authentic letter sets) ─────────────────────────────────────
+const DICE=[
+  'AAEEGN','ABBJOO','ACHOPS','AFFKPS',
+  'AOOTTW','CIMOTU','DEILRX','DELRVY',
+  'DISTTY','EEGHNW','EEINSU','EHRTVW',
+  'EIOSST','ELRTTY','HIMNUQ','HLNNRZ'
+];
+function rollBoard(){
+  const shuffled=[...DICE].sort(()=>Math.random()-.5);
+  return shuffled.map(d=>d[Math.floor(Math.random()*d.length)]);
+}
+
+// ─── LETTER POINTS ────────────────────────────────────────────────────────────
+const PV={A:1,E:1,I:1,O:1,U:1,N:1,R:1,T:1,L:1,S:1,D:2,G:2,B:3,C:3,M:3,P:3,F:4,H:4,V:4,W:4,Y:4,K:5,J:8,X:8,Q:10,Z:10};
+
+function boggleScore(n){
+  if(n<=4)return 1;
+  if(n===5)return 2;
+  if(n===6)return 3;
+  if(n===7)return 5;
+  return 11;
+}
+
+// ─── STATE ────────────────────────────────────────────────────────────────────
+let board=[],path=[],found=[],score=0,timeLeft=180,timer=null,live=false,best=+localStorage.getItem('bgl')||0;
+
+// ─── DOM ──────────────────────────────────────────────────────────────────────
+const boardEl=document.getElementById('board');
+const wordBar=document.getElementById('wordBar');
+const scoreEl=document.getElementById('scoreVal');
+const timerEl=document.getElementById('timerVal');
+const foundListEl=document.getElementById('foundList');
+const wordCntEl=document.getElementById('wordCnt');
+const overlay=document.getElementById('overlay');
+const pathLine=document.getElementById('pathLine');
+const pathSvg=document.getElementById('pathSvg');
+
+// ─── BOARD RENDER ─────────────────────────────────────────────────────────────
+function renderBoard(){
+  boardEl.innerHTML='';
+  board.forEach((lt,i)=>{
+    const d=document.createElement('div');
+    d.className='cell';
+    d.dataset.i=i;
+    d.innerHTML=`${lt==='Q'?'Qu':lt}<span class="pts">${PV[lt]||1}</span>`;
+    boardEl.appendChild(d);
+  });
+}
+
+function cells(){return boardEl.querySelectorAll('.cell')}
+
+function refreshCells(){
+  cells().forEach((c,i)=>{
+    c.classList.remove('selected','on-path');
+    if(path.includes(i)){
+      if(path[path.length-1]===i)c.classList.add('selected');
+      else c.classList.add('on-path');
+    }
+  });
+}
+
+// ─── SVG PATH LINE ────────────────────────────────────────────────────────────
+function cellCenter(i){
+  const c=boardEl.querySelector(`.cell[data-i="${i}"]`);
+  if(!c)return null;
+  const br=boardEl.getBoundingClientRect();
+  const cr=c.getBoundingClientRect();
+  return{x:cr.left-br.left+cr.width/2,y:cr.top-br.top+cr.height/2};
+}
+
+function updatePathLine(){
+  if(path.length<2){pathLine.setAttribute('points','');return;}
+  const pts=path.map(i=>cellCenter(i)).filter(Boolean).map(p=>`${p.x},${p.y}`).join(' ');
+  pathLine.setAttribute('points',pts);
+}
+
+// ─── CURRENT WORD ─────────────────────────────────────────────────────────────
+function currentWord(){
+  return path.map(i=>(board[i]==='Q'?'qu':board[i].toLowerCase())).join('');
+}
+
+function updateBar(){
+  const w=currentWord();
+  wordBar.className='word-bar';
+  if(!w){wordBar.innerHTML='<span class="hint">글자를 드래그하세요</span>';return;}
+  wordBar.textContent=w.toUpperCase();
+  if(w.length>=3){
+    if(found.includes(w))wordBar.classList.add('dupe');
+    else if(W.has(w))wordBar.classList.add('valid');
+  }
+}
+
+// ─── ADJACENCY ────────────────────────────────────────────────────────────────
+function adj(a,b){
+  const ra=Math.floor(a/4),ca=a%4,rb=Math.floor(b/4),cb=b%4;
+  return Math.abs(ra-rb)<=1&&Math.abs(ca-cb)<=1&&a!==b;
+}
+
+// ─── PATH CONTROL ─────────────────────────────────────────────────────────────
+function addCell(idx){
+  if(!live||idx<0)return;
+  const last=path[path.length-1];
+  if(path.includes(idx)){
+    // allow backtracking to second-to-last cell
+    if(idx===path[path.length-2]){
+      const removed=path.pop();
+      boardEl.querySelector(`.cell[data-i="${removed}"]`).classList.remove('selected');
+      refreshCells();updateBar();updatePathLine();
+    }
+    return;
+  }
+  if(last!==undefined&&!adj(last,idx))return;
+  path.push(idx);
+  refreshCells();updateBar();updatePathLine();
+}
+
+function clearPath(){
+  path=[];
+  refreshCells();
+  updateBar();
+  pathLine.setAttribute('points','');
+}
+
+function submitWord(){
+  if(!live)return;
+  const w=currentWord();
+  if(w.length<3){clearPath();return;}
+  if(found.includes(w)){
+    wordBar.classList.add('dupe');
+    setTimeout(clearPath,450);return;
+  }
+  if(W.has(w)){
+    const pts=boggleScore(w.length);
+    score+=pts;
+    found.push(w);
+    scoreEl.textContent=score;
+    wordCntEl.textContent=found.length;
+    // chip
+    const chip=document.createElement('div');
+    chip.className='word-chip';
+    chip.textContent=`${w.toUpperCase()} +${pts}`;
+    foundListEl.prepend(chip);
+    // flash cells
+    [...path].forEach(i=>{
+      const c=boardEl.querySelector(`.cell[data-i="${i}"]`);
+      c&&c.classList.add('found-flash');
+      setTimeout(()=>c&&c.classList.remove('found-flash'),250);
+    });
+    // float score
+    floatScore(pts);
+    clearPath();
+  } else {
+    wordBar.classList.add('bad');
+    setTimeout(clearPath,380);
+  }
+}
+
+function floatScore(pts){
+  const el=document.createElement('div');
+  el.className='float-score';
+  el.textContent=`+${pts}`;
+  const br=boardEl.getBoundingClientRect();
+  el.style.left=`${br.left+br.width/2-20}px`;
+  el.style.top=`${br.top+20}px`;
+  document.body.appendChild(el);
+  setTimeout(()=>el.remove(),950);
+}
+
+// ─── TOUCH / MOUSE ────────────────────────────────────────────────────────────
+function idxFromPoint(x,y){
+  const all=boardEl.querySelectorAll('.cell');
+  for(const c of all){
+    const r=c.getBoundingClientRect();
+    if(x>=r.left&&x<=r.right&&y>=r.top&&y<=r.bottom)return+c.dataset.i;
+  }
+  return -1;
+}
+
+boardEl.addEventListener('touchstart',e=>{
+  e.preventDefault();clearPath();
+  const t=e.touches[0];addCell(idxFromPoint(t.clientX,t.clientY));
+},{passive:false});
+
+boardEl.addEventListener('touchmove',e=>{
+  e.preventDefault();
+  const t=e.touches[0];addCell(idxFromPoint(t.clientX,t.clientY));
+},{passive:false});
+
+boardEl.addEventListener('touchend',e=>{e.preventDefault();submitWord();},{passive:false});
+
+let mouseDown=false;
+boardEl.addEventListener('mousedown',e=>{
+  mouseDown=true;clearPath();
+  const c=e.target.closest('.cell');if(c)addCell(+c.dataset.i);
+});
+boardEl.addEventListener('mousemove',e=>{
+  if(!mouseDown)return;
+  const c=e.target.closest('.cell');if(c)addCell(+c.dataset.i);
+});
+boardEl.addEventListener('mouseup',()=>{if(mouseDown){mouseDown=false;submitWord();}});
+window.addEventListener('mouseup',()=>{if(mouseDown){mouseDown=false;submitWord();}});
+
+// ─── TIMER ────────────────────────────────────────────────────────────────────
+function tick(){
+  const m=Math.floor(timeLeft/60),s=timeLeft%60;
+  timerEl.textContent=`${m}:${s.toString().padStart(2,'0')}`;
+  timerEl.className='stat-val'+(timeLeft<=30?' urgent':'');
+  if(timeLeft<=0){endGame();return;}
+  timeLeft--;
+}
+
+// ─── GAME FLOW ────────────────────────────────────────────────────────────────
+function startGame(){
+  overlay.classList.add('off');
+  board=rollBoard();
+  path=[];found=[];score=0;timeLeft=180;live=true;
+  scoreEl.textContent='0';
+  wordCntEl.textContent='0';
+  foundListEl.innerHTML='';
+  timerEl.className='stat-val';
+  renderBoard();
+  clearPath();
+  if(timer)clearInterval(timer);
+  tick();
+  timer=setInterval(tick,1000);
+}
+
+function endGame(){
+  clearInterval(timer);live=false;clearPath();
+  if(score>best){best=score;localStorage.setItem('bgl',best);}
+  document.getElementById('modalSub').style.display='none';
+  document.getElementById('modalRules').style.display='none';
+  const res=document.getElementById('modalResult');
+  res.style.display='block';
+  document.getElementById('modalPts').textContent=score;
+  document.getElementById('modalWordsFnd').textContent=`${found.length}개 단어 발견`;
+  document.getElementById('modalBest').textContent=`최고 점수: ${best}점`;
+  document.getElementById('startBtn').textContent='다시 하기';
+  overlay.classList.remove('off');
+}
+
+function newGame(){
+  document.getElementById('modalSub').style.display='';
+  document.getElementById('modalRules').style.display='';
+  document.getElementById('modalResult').style.display='none';
+  document.getElementById('startBtn').textContent='게임 시작';
+  if(timer)clearInterval(timer);
+  live=false;
+  overlay.classList.remove('off');
+}
+
+document.getElementById('startBtn').onclick=startGame;
+document.getElementById('newBtn').onclick=newGame;
+</script>
+</body>
+</html>
