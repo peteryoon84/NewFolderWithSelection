@@ -1,0 +1,409 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>나트랑 4박6일 · 일정 & 체크리스트</title>
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"/>
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/orioncactus/pretendard@v1.3.9/dist/web/static/pretendard.css">
+<link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@500;700&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --bg:#0a0a0a;--bg2:#121110;--card:#1a1817;--line:#2a2725;
+    --ink:#f4f1ec;--ink2:#a8a29a;--ink3:#6f6a63;
+    --accent:#E8600A;--accent2:#ff8a3d;--gold:#d9b48a;--green:#4caf50;
+    --mono:'JetBrains Mono',monospace;--sans:'Pretendard',-apple-system,sans-serif;
+  }
+  *{margin:0;padding:0;box-sizing:border-box}
+  html{scroll-behavior:smooth}
+  body{background:var(--bg);color:var(--ink);font-family:var(--sans);line-height:1.6;-webkit-font-smoothing:antialiased}
+  .wrap{max-width:680px;margin:0 auto;padding:0 16px 80px}
+  header{padding:26px 0 12px;text-align:center}
+  .kicker{font-family:var(--mono);font-size:11px;letter-spacing:.42em;color:var(--accent);text-transform:uppercase;margin-bottom:10px}
+  h1{font-size:27px;font-weight:800;letter-spacing:-.02em;line-height:1.12}
+  h1 .vn{display:block;font-family:var(--mono);font-weight:500;font-size:11px;letter-spacing:.26em;color:var(--ink3);margin-top:8px}
+
+  /* main tabs */
+  .tabs{position:sticky;top:0;z-index:60;display:flex;gap:6px;background:var(--bg);padding:8px 16px;margin:10px -16px 0;border-bottom:1px solid var(--line)}
+  .tab{flex:1;font-family:var(--mono);font-size:12px;font-weight:700;letter-spacing:.04em;color:var(--ink2);
+    background:var(--card);border:1px solid var(--line);border-radius:10px;padding:9px 6px;cursor:pointer;transition:.15s;text-align:center}
+  .tab.active{background:var(--accent);color:#000;border-color:var(--accent)}
+  .panel{display:none}
+  .panel.active{display:block}
+
+  /* sticky map + day pills (itinerary) */
+  .sticky{position:sticky;top:47px;z-index:50;margin:0 -16px 8px;background:var(--bg);border-bottom:1px solid var(--line)}
+  #map{height:280px;width:100%;background:#0d0d0d;transition:height .3s}
+  .sticky.collapsed #map{height:0}
+  .map-bar{display:flex;align-items:center;justify-content:space-between;padding:8px 14px;background:var(--bg2)}
+  .map-bar .route-title{font-family:var(--mono);font-size:11px;letter-spacing:.1em;color:var(--accent)}
+  .map-bar button{font-family:var(--mono);font-size:11px;color:var(--ink2);background:none;border:1px solid var(--line);border-radius:7px;padding:4px 10px;cursor:pointer}
+  .days{display:flex;gap:8px;overflow-x:auto;scrollbar-width:none;padding:10px 14px}
+  .days::-webkit-scrollbar{display:none}
+  .day-pill{flex:0 0 auto;font-family:var(--mono);font-size:12px;font-weight:700;letter-spacing:.05em;color:var(--ink2);background:var(--card);border:1px solid var(--line);border-radius:999px;padding:7px 15px;cursor:pointer;white-space:nowrap;transition:.2s}
+  .day-pill.active{background:var(--accent);color:#000;border-color:var(--accent)}
+
+  .leaflet-container{background:#0d0d0d;font-family:var(--sans)}
+  .num-marker{display:flex;align-items:center;justify-content:center;width:26px;height:26px;border-radius:50%;background:var(--accent);color:#000;font-family:var(--mono);font-weight:700;font-size:12px;border:2px solid #1a1208;box-shadow:0 2px 6px rgba(0,0,0,.5)}
+  .num-marker.soft{background:var(--card);color:var(--accent);border-color:var(--accent)}
+  .leaflet-popup-content-wrapper{background:var(--card);color:var(--ink);border-radius:10px;border:1px solid var(--line)}
+  .leaflet-popup-tip{background:var(--card)}
+  .leaflet-popup-content{margin:9px 12px;font-size:13px}
+  .leaflet-popup-content b{color:var(--accent)}
+  .leaflet-control-attribution{background:rgba(0,0,0,.5)!important;color:#555!important}
+  .leaflet-control-attribution a{color:#777!important}
+
+  .day{padding-top:22px;scroll-margin-top:400px}
+  .day-head{display:flex;align-items:baseline;gap:12px}
+  .day-no{font-family:var(--mono);font-size:40px;font-weight:700;color:var(--accent);line-height:1;letter-spacing:-.03em}
+  .day-info .date{font-family:var(--mono);font-size:12px;letter-spacing:.2em;color:var(--ink2)}
+  .day-info .theme{font-size:15px;font-weight:700;margin-top:2px}
+  .day-line{height:1px;background:linear-gradient(90deg,var(--accent),transparent);margin:13px 0 18px}
+
+  .slot{position:relative;padding-left:50px;padding-bottom:13px}
+  .slot::before{content:"";position:absolute;left:13px;top:8px;bottom:-5px;width:1px;background:var(--line)}
+  .slot:last-child::before{display:none}
+  .num{position:absolute;left:0;top:1px;width:27px;height:27px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-family:var(--mono);font-size:12px;font-weight:700;background:var(--card);border:1px solid var(--line);color:var(--ink3);z-index:1}
+  .slot.key .num{background:var(--accent);color:#000;border-color:var(--accent)}
+  .slot.has .num{cursor:pointer}
+  .time{font-family:var(--mono);font-size:11px;font-weight:700;color:var(--ink3);margin-bottom:3px}
+  .card{background:var(--card);border:1px solid var(--line);border-radius:13px;padding:12px 14px;display:flex;gap:10px;align-items:flex-start;transition:.2s}
+  .card.has{cursor:pointer}
+  .card.flash{border-color:var(--accent);box-shadow:0 0 0 3px rgba(232,96,10,.18)}
+  .emoji{font-size:18px;line-height:1.35;flex:0 0 auto}
+  .c-body{flex:1;min-width:0}
+  .title{font-size:14.5px;font-weight:700;letter-spacing:-.01em}
+  .title .tag{font-family:var(--mono);font-size:9px;font-weight:700;letter-spacing:.06em;color:var(--accent);border:1px solid rgba(232,96,10,.4);border-radius:4px;padding:1px 5px;margin-left:6px;vertical-align:2px}
+  .desc{font-size:12.5px;color:var(--ink2);margin-top:3px}
+  .cost{display:inline-block;font-family:var(--mono);font-size:11px;color:var(--gold);margin-top:6px}
+  .go{flex:0 0 auto;color:var(--ink3);font-size:15px;text-decoration:none;padding:2px}
+
+  /* checklist */
+  .prog{position:sticky;top:47px;z-index:40;background:var(--bg);padding:12px 0 8px;margin-bottom:4px}
+  .prog-bar{height:7px;background:var(--card);border-radius:999px;overflow:hidden;border:1px solid var(--line)}
+  .prog-fill{height:100%;width:0;background:linear-gradient(90deg,var(--accent),var(--accent2));transition:width .3s}
+  .prog-txt{font-family:var(--mono);font-size:11px;color:var(--ink2);margin-top:6px;letter-spacing:.05em}
+  .sec{margin-top:22px}
+  .sec-h{font-size:15px;font-weight:800;letter-spacing:-.01em;margin-bottom:11px;padding-bottom:7px;border-bottom:1px solid var(--line);color:var(--accent2)}
+  .chk{display:flex;gap:11px;align-items:flex-start;padding:9px 12px;background:var(--card);border:1px solid var(--line);border-radius:11px;margin-bottom:7px;cursor:pointer;transition:.15s}
+  .chk:active{border-color:var(--accent)}
+  .chk input{appearance:none;-webkit-appearance:none;flex:0 0 auto;width:20px;height:20px;border:2px solid var(--ink3);border-radius:6px;margin-top:1px;cursor:pointer;position:relative;transition:.15s}
+  .chk input:checked{background:var(--accent);border-color:var(--accent)}
+  .chk input:checked::after{content:"✓";position:absolute;inset:0;display:flex;align-items:center;justify-content:center;color:#000;font-size:13px;font-weight:900}
+  .chk label{flex:1;font-size:13.5px;cursor:pointer}
+  .chk.done label{color:var(--ink3);text-decoration:line-through}
+  .chk.sub{margin-left:24px;background:transparent;border-style:dashed}
+  .chk .day-pin{font-family:var(--mono);font-size:10px;font-weight:700;color:var(--accent);margin-right:5px}
+  footer{text-align:center;margin-top:46px;padding-top:18px;border-top:1px solid var(--line);font-family:var(--mono);font-size:10px;letter-spacing:.14em;color:var(--ink3);line-height:1.8}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <div class="kicker">Nha Trang · 4N6D</div>
+    <h1>나트랑 4박6일<span class="vn">2026.06.29 — 07.04 · 2인</span></h1>
+  </header>
+
+  <div class="tabs">
+    <div class="tab active" data-tab="itin">🗺️ 일정</div>
+    <div class="tab" data-tab="todo">📋 투두</div>
+    <div class="tab" data-tab="check">✅ 체크리스트</div>
+  </div>
+
+  <!-- ITINERARY -->
+  <section class="panel active" id="panel-itin">
+    <div class="sticky" id="sticky">
+      <div class="map-bar">
+        <span class="route-title" id="routeTitle">DAY 01 · 동선</span>
+        <button id="toggleMap">지도 접기 ▴</button>
+      </div>
+      <div id="map"></div>
+      <div class="days" id="days"></div>
+    </div>
+    <div id="budget" style="background:var(--card);border:1px solid var(--line);border-radius:14px;padding:14px 16px;margin:4px 0 6px">
+      <div style="font-family:var(--mono);font-size:11px;letter-spacing:.12em;color:var(--accent);margin-bottom:8px">💰 예산 요약 · 2인 (현지 경비 · 항공·숙소 별도)</div>
+      <div style="font-size:13px;color:var(--ink2);line-height:2">
+        🍽️ 식비(식당·카페·과일) <b style="color:var(--gold);float:right">≈ 31만원</b><br>
+        💆 마사지·네일·스파 <b style="color:var(--gold);float:right">≈ 15만원</b><br>
+        🛍️ 쇼핑(옷·가방·견과·마트) <b style="color:var(--gold);float:right">≈ 19만원</b><br>
+        🚤 투어·입장(호핑·포나가르) <b style="color:var(--gold);float:right">≈ 12만원</b><br>
+        🚕 교통(그랩·주유·통행) <b style="color:var(--gold);float:right">≈ 9만원</b><br>
+        🅿️ 김해 주차(6일) <b style="color:var(--gold);float:right">≈ 5.5만원</b><br>
+        🎫 베나자 프리미엄팩 <b style="color:var(--gold);float:right">≈ 12만원</b>
+      </div>
+      <div style="border-top:1px solid var(--line);margin-top:10px;padding-top:9px;font-size:14px;font-weight:800">
+        현지 경비 합계 <span style="color:var(--accent);float:right">≈ 약 104만원</span>
+      </div>
+      <div style="font-size:11px;color:var(--ink3);margin-top:8px;line-height:1.6">* 추정치(2인) · 환율·환경 따라 변동 · <b>항공권·숙소비는 별도</b> · 각 일정 카드에 항목별 비용 표기</div>
+    </div>
+    <div id="app"></div>
+  </section>
+
+  <!-- TODO -->
+  <section class="panel" id="panel-todo">
+    <div class="prog"><div class="prog-bar"><div class="prog-fill" id="fill-todo"></div></div><div class="prog-txt" id="txt-todo"></div></div>
+    <div id="todo"></div>
+  </section>
+
+  <!-- CHECKLIST -->
+  <section class="panel" id="panel-check">
+    <div class="prog"><div class="prog-bar"><div class="prog-fill" id="fill-check"></div></div><div class="prog-txt" id="txt-check"></div></div>
+    <div id="check"></div>
+  </section>
+
+  <footer>NHA TRANG · STUDIO SAIRO<br>일정 장소 탭→지도 이동 · 체크는 이 브라우저에 저장됨</footer>
+</div>
+
+<script>
+const HOTEL_IC=[12.2445911,109.1960166],HOTEL_AM=[12.1050247,109.1911003];
+const LOTTE=[12.2481451,109.1948614],LOUNGE=[12.2413642,109.1916403];
+const GIMHAE=[35.1728688,128.9471783],HOME=[35.7981004,128.4998679],CAMRANH=[11.9982,109.2193];
+
+const DATA=[
+ {no:"01",date:"06.29 MON",theme:"쾌속 입국 & 시내 워밍업",slots:[
+   {t:"새벽",e:"🏠",title:"대구 화암로 120 · 출발",d:"김해공항行 차량 약 1시간 10분",cost:"주유·통행료 ≈ 25,000원",loc:HOME},
+   {t:"~",e:"🅿️",title:"강서주차장 입차 (발렛)",d:"김해공항 사설 장기주차 · 발렛 후 셔틀 · 입차 시 차량 사진 · 예약 필수",cost:"6일 ≈ 55,000원",loc:GIMHAE},
+   {t:"~",e:"✈️",title:"김해국제공항 · 출국",tag:"VJ919",d:"3시간 전 도착 · 비엣젯",loc:GIMHAE},
+   {t:"13:35",e:"🛬",title:"깜란 공항 · 입국",d:"프리미엄팩 패스트트랙 + 단독 픽업 (45분)",cost:"프리미엄팩 2인 ≈ 120,000원",loc:CAMRANH,key:1},
+   {t:"14:45",e:"🏨",title:"인터컨티넨탈 · 체크인 (가볍게)",d:"신변정리만 · 16시 전 출발",cost:"숙소 별도",loc:HOTEL_IC,key:1},
+   {t:"15:40",e:"🥖",title:"반미 판 (포장)",d:"미트볼·모듬 반미 포장 · 커피 안 팔아서 CCCP로 · 4.5★/3,627",cost:"≈ 4,000원",loc:[12.2398487,109.1928906],key:1},
+   {t:"15:55",e:"☕",title:"CCCP 커피 (반미+커피)",tag:"VIP 10%",d:"포장 반미 + 코코넛커피 + 계란커피",cost:"≈ 4,800원",loc:[12.2400149,109.1921561],key:1},
+   {t:"16:30",e:"👗",title:"데이지블룸 (옷 쇼핑)",d:"한국 여성복st·트렌디·저렴·품질 좋음 · 5.0★/1,975 (Trịnh Phong)",cost:"≈ 30,000원",loc:[12.2390158,109.1904265]},
+   {t:"16:50",e:"💆",title:"제이 스파 — 남편 (마사지 1)",tag:"FREE",d:"프리미엄팩 무료 바우처 · 전신 (팁 ≈ 4,400원)",cost:"0원 (팁 ≈ 4,400원)",loc:[12.239651,109.1914036]},
+   {t:"16:50",e:"💅",title:"니에나 네일 — 아내",tag:"~18:30",d:"4.9★/7,117 인기 네일 · 디자인 다양·무료 A/S · 마감 18:30 주의",cost:"≈ 25,000원",loc:[12.2385106,109.1910254],key:1},
+   {t:"18:30",e:"🛒",title:"롯데마트 골드코스트점",d:"컷팅망고·타이거맥주·하오하오·생수·생필품",cost:"생필품 ≈ 30,000원",loc:LOTTE},
+   {t:"19:30",e:"🦞",title:"목 꽌 (저녁 · 해산물)",d:"랍스터 1kg(갈릭버터/치즈) + 공심채 마늘볶음 + 마늘 새우볶음밥 + 맛조개·가리비구이 + 타이거 생맥주 · 2인 적당 · 4.9★/13,989",cost:"≈ 40,000원",loc:[12.2405298,109.1894761],key:1},
+   {t:"21:00",e:"🎁",title:"키사 수비니어 (기념품)",d:"2층 규모·핸드메이드/재활용 굿즈·가격표 있음(흥정X) · 4.9★/1,574 · ~21시",cost:"≈ 15,000원",loc:[12.2404527,109.1918753]},
+   {t:"21:20",e:"🥭",title:"65B 과일가게 (원조·파란간판)",d:"애플망고·망고스틴·리치·용과 + 두리안(원조만) · 한국어 가능·시식 · ~22시",cost:"≈ 15,000원",loc:[12.2416605,109.1912910]},
+   {t:"21:40",e:"☕",title:"콩카페 (마무리 · 응웬짠점)",d:"베트남 국민 카페 · 옛 재봉공장 빈티지 · 코코넛 스무디 · ~23시",cost:"≈ 9,000원",loc:[12.2454603,109.1932539]},
+   {t:"22:15",e:"🏨",title:"인터컨티넨탈 복귀",d:"그랩 약 5분",cost:"그랩 ≈ 5,000원",loc:HOTEL_IC},
+ ]},
+ {no:"02",date:"06.30 TUE",theme:"프라이빗 바다 → 시내 스파·쇼핑",slots:[
+   {t:"07:30",e:"🍳",title:"인터컨티넨탈 조식",d:"즉석 쌀국수·쓰아다",cost:"0원 (포함)",loc:HOTEL_IC},
+   {t:"08:30",e:"🚤",title:"호핑투어 · 선착장/스피드보트",tag:"예약",d:"산호 스노클링·열대어·선상간식",cost:"2인 ≈ 120,000원",loc:[12.2046,109.2114],key:1},
+   {t:"11:30",e:"🏖️",title:"레이비치 · 해산물 BBQ 점심",d:"프라이빗 해변 선베드·포토존",cost:"호핑 포함",loc:[12.2046,109.2114]},
+   {t:"14:30",e:"🧳",title:"숙소 들러 짐만 풀고 바로 시내行",d:"낮잠 대신 스파에서 수면 보충",cost:"그랩 ≈ 6,000원",loc:HOTEL_IC},
+   {t:"15:30",e:"💆",title:"라운지 스파 (마사지 2)",tag:"VIP 20%",d:"무료 픽업 · 핫스톤 90분 · 받으면서 한숨 자기",cost:"≈ 45,000원",loc:LOUNGE,key:1},
+   {t:"17:30",e:"🍕",title:"피자 4P's (저녁 · 쉐라톤)",tag:"예약",d:"부라타·마르게리타·자체 치즈 · 4.9★/13,636 · 항상 만석이라 예약 필수 · 낮 호핑 로컬식 후 양식으로 환기",cost:"≈ 45,000원",loc:[12.2462509,109.1961947],key:1},
+   {t:"19:15",e:"👜",title:"부부샵 & 마담홍 (가방·라탄)",d:"라탄백·모자·키링·여름옷 · 친절 · 5.0★/1,031 (Võ Trứ)",cost:"≈ 25,000원",loc:[12.2413003,109.1914215]},
+   {t:"20:00",e:"🍯",title:"뷰모리 (Viewmory · 꿀·견과)",d:"한국인 운영(한국어)·꿀·마카다미아·캐슈버터·잼·차 · 5.0★/2,627 · ~21시",cost:"≈ 25,000원",loc:[12.2422868,109.1928423]},
+   {t:"20:45",e:"☕",title:"우메커피 (Ume by Ola)",d:"올라 운영·흙빛 톤·전통 안뜰 인테리어 · 코코넛커피 · 4.8★/710 · ~22시",cost:"≈ 9,000원",loc:[12.2364128,109.1841007]},
+ ]},
+ {no:"03",date:"07.01 WED",theme:"시내 마무리 → 모던 리조트 전환",slots:[
+   {t:"08:30",e:"🍳",title:"인터컨티넨탈 조식",d:"여유로운 뷔페",cost:"0원 (포함)",loc:HOTEL_IC},
+   {t:"09:40",e:"🧘",title:"모닝 요가/스트레칭",d:"리조트 전 가벼운 워밍업",cost:"0원",loc:HOTEL_IC},
+   {t:"11:30",e:"🧳",title:"체크아웃",d:"짐 정리",loc:HOTEL_IC},
+   {t:"12:30",e:"🍜",title:"안어이 퍼 (점심 · 왕갈비 쌀국수)",d:"소뼈 왕갈비 쌀국수 시그니처 + 파인애플 볶음밥·스프링롤 · 4.8★/2,511",cost:"≈ 25,000원",loc:[12.2403273,109.1897766],key:1},
+   {t:"13:30",e:"🚕",title:"깜란 리조트로 이동",d:"그랩 약 40분 (남쪽)",cost:"≈ 25,000원",loc:HOTEL_AM},
+   {t:"14:15",e:"🏨",title:"아미아나 리조트 깜란 · 체크인",tag:"하프보드",d:"디럭스 씨뷰 킹룸 · 인피니티 풀·비치",cost:"숙소 별도",loc:HOTEL_AM,key:1},
+   {t:"18:00",e:"🍽️",title:"리조트 다이닝 (석식)",d:"하프보드 코스/뷔페",cost:"0원 (포함)",loc:HOTEL_AM},
+   {t:"19:30",e:"🌙",title:"리조트 밤 산책 · 룸서비스 야식",d:"트로피컬 과일 플래터·코코넛 (가볍게)",cost:"≈ 12,000원",loc:HOTEL_AM},
+ ]},
+ {no:"04",date:"07.02 THU",theme:"깜란 리조트 콕 박히기 + K10 만찬",slots:[
+   {t:"08:30",e:"🍳",title:"아미아나 조식 뷔페",d:"",cost:"0원 (포함)",loc:HOTEL_AM},
+   {t:"10:00",e:"🤿",title:"프라이빗 비치 스노클링",d:"청정 깜란 앞바다·해먹 독서",cost:"0원 (리조트)",loc:HOTEL_AM},
+   {t:"12:30",e:"🍔",title:"리조트 풀바 (점심)",d:"수제 비프버거·마르게리타 피자·사이공 생맥주",cost:"≈ 37,000원",loc:HOTEL_AM},
+   {t:"15:15",e:"💆",title:"프라이빗 머드 스파 (마사지 4)",d:"천연 머드욕 + 미네랄 온천수 샤워",cost:"≈ 45,000원",loc:HOTEL_AM},
+   {t:"18:00",e:"🦞",title:"K10 해산물 (저녁 외출) / 또는 배달K",tag:"픽업",d:"K10 호텔 무료 픽업·랍스터·타이거새우·굴구이 (카카오 K10seafood) · 콕 박혀 쉬고 싶으면 '배달K' 앱으로 리조트에 한식 야식 배달(찌개·치킨·삼겹살, 깜란 배달 가능·게이트 수령)",cost:"2인 ≈ 50,000원",loc:[12.0492002,109.1946881],key:1},
+   {t:"20:30",e:"🍸",title:"아미아나 라운지 바 · 야식 과일",d:"모히토·피나콜라다 + 트로피컬 과일 플래터",cost:"≈ 19,000원",loc:HOTEL_AM},
+ ]},
+ {no:"05",date:"07.03 FRI – 07.04 SAT",theme:"영감 코스 & 출국 → 귀가",slots:[
+   {t:"08:30",e:"🍳",title:"아미아나 조식·체크아웃·출발",d:"→ 시내 약 40분",cost:"0원 (포함)",loc:HOTEL_AM},
+   {t:"12:45",e:"🧳",title:"베나자 라운지 · 짐 보관 + 풋스파 예약",d:"무료 짐 보관 · 같은 건물 베나자 풋스파 예약 시 공항 무료 샌딩 제공",cost:"보관 무료",loc:[12.2419216,109.1916528]},
+   {t:"13:00",e:"🍽️",title:"안토이 2호점 (점심)",d:"퍼보(소고기 쌀국수)·반세오 직접 만들기·새우튀김·넴느엉 · 다낭 본점 미슐랭 · 4.9★/4,249 · 베나자서 도보 5분",cost:"≈ 30,000원",loc:[12.2378215,109.1902234],key:1},
+   {t:"14:30",e:"🥙",title:"그릭 수블라키 (간식)",d:"기로스 1개 사서 둘이 나눠 맛보기 · 4.7★/2,584 (현금)",cost:"≈ 8,000원",loc:[12.2377955,109.1938344]},
+   {t:"15:00",e:"🛕",title:"포나가르 사원",tag:"~17:30",d:"북쪽 · 고대 붉은벽돌탑 기하학 조형",cost:"입장 2인 ≈ 3,000원",loc:[12.2654,109.1957],key:1},
+   {t:"15:45",e:"🛍️",title:"롯데마트 냐짱점 (선물·견과·소스 일괄)",d:"마카다미아·캐슈넛·아치카페·칠리소스·느억맘·인스턴트 쌀국수·망고젤리 (부피템 마지막에)",cost:"≈ 60,000원",loc:LOTTE},
+   {t:"17:00",e:"💆",title:"베나자 풋스파 (출국 전 · 샌딩 포함)",d:"한국어 가능·웰컴티 · 풋+머리/어깨 마사지 · 4.9★/5,637 · 짐 보관처와 동일 건물 · 여기서 공항 무료 샌딩",cost:"≈ 35,000원",loc:[12.2419216,109.1916528],key:1},
+   {t:"18:30",e:"🥖",title:"반미 판 (기내용 포장)",d:"미트볼·모듬 반미 · 냄새 적고 마른 음식이라 기내 적합",cost:"≈ 4,000원",loc:[12.2398487,109.1928906]},
+   {t:"20:00",e:"✈️",title:"깜란 국제공항 · 출국",tag:"LJ116",d:"베나자 풋스파 무료 샌딩 (프리미엄팩엔 출국 샌딩 없음) · 23:55 출발 · 3시간 전 도착",cost:"항공 별도",loc:CAMRANH,key:1},
+   {t:"06:50",e:"🛬",title:"김해국제공항 도착",d:"7.4(토) 새벽",loc:GIMHAE},
+   {t:"07:10",e:"🅿️",title:"강서주차장 차량 출고",d:"입국장 도착 후 픽업 전화 · 무료 셔틀(05:00~) · 차량 외관 확인",cost:"0원 (정산완료)",loc:GIMHAE},
+   {t:"이후",e:"🏠",title:"대구 화암로 120 · 귀가",d:"약 1시간 10분",cost:"주유·통행료 ≈ 25,000원",loc:HOME},
+ ]},
+];
+
+const TODO=[
+ {h:"🅿️ D-7~D-5 · 주차 & 예약",items:[
+   "김해공항 사설 장기주차 예약 (성수기라 3~5일 전 필수)",
+   {sub:1,t:"강서/가람/VIP/연주차장 — 새벽 픽업(귀국 7.4 06:50) 가능 확인"},
+   {sub:1,t:"발렛/셔틀 방식·6일 총요금·사전결제 할인 비교"},
+   {sub:1,t:"예약번호·업체 전화 저장 / 입차 시 차량·주행거리 사진"},
+   "베나자 풋스파 5일차 예약 (마사지 + 무료 공항 샌딩, 짐 보관)",
+   "피자 4P's 2일차 저녁 예약 (항상 만석)",
+   "호핑투어 2일차 예약·결제·픽업시간 확인",
+   "1일차 제이 스파(남편)·니에나 네일(아내) 예약 — 니에나 18:30 마감, 16:50 시작",
+   "4일차 K10 호텔픽업 예약(카카오 K10seafood) / 배달K 앱 설치",
+   "인터컨·아미아나 바우처 캡처·체크인 시간 확인",
+ ]},
+ {h:"📱 D-5~D-3 · 앱·서류·돈",items:[
+   "여권 유효기간 6개월 이상 (둘 다)",
+   "e-비자/무비자 조건 확인 + 출력본 1부씩",
+   "항공권 e-티켓 캡처 (가는 편·오는 편)",
+   "여행자보험 보장범위·증서 확인 (프리미엄팩 포함분)",
+   "앱 설치: 그랩·배달K·구글맵(오프라인 저장)·카카오T·환율계산기",
+   "베나자 프리미엄팩 바우처 캡처 (패스트트랙·픽업·유심·마사지)",
+   "환전은 현지 젠스파(무수수료), 소액 USD만 준비",
+   "신용카드 해외결제 활성화 + 현금(동) 약간",
+   "로밍 또는 유심(프리미엄팩 포함) 정리",
+ ]},
+ {h:"🚗 출발 당일 (6.29 새벽)",items:[
+   "집→김해 약 1시간 10분 + 여유 (3시간 전 도착 역산해 출발)",
+   "가스·전기·보일러·창문·도어락 점검",
+   "냉장고 정리·쓰레기 배출",
+   "주차장 입차 → 차량 사진 → 발렛/셔틀로 청사",
+   "블랙박스 주차모드·전원케이블 확인 (방전 예방)",
+   "패스트트랙·수하물 무게(위탁/기내) 확인",
+ ]},
+];
+
+const CHECK=[
+ {h:"👙 짐싸기 · 공용",items:[
+   "수영복 (현지서 비키니 비비안 구매 예정이면 최소만)",
+   "래시가드/커버업·슬리퍼·아쿠아슈즈",
+   "선크림(고지수)·애프터선·모자·선글라스",
+   "보조배터리(기내 휴대)·멀티충전기·C타입 케이블",
+   "우산/우비 (6~7월 우기 스콜 대비)",
+   "상비약: 지사·소화·해열진통·밴드·모기기피·진정젤",
+   "얇은 긴팔/가디건 (냉방·기내·사원 방문)",
+   "지퍼백·에코백·세면도구·기본 화장품",
+   "캐리어 자물쇠·수하물 태그·여권 사본",
+ ]},
+ {h:"💑 짐싸기 · 아내 (멀미 / 수영 약함)",items:[
+   "멀미약 넉넉히 (호핑 보트·깜란 40분 이동) — 출발 30분 전 복용",
+   "멀미밴드·생강캔디 (보트용)",
+   "구명조끼 투어 제공 확인 · 스노클링 강요 X · 해먹/선베드 위주",
+   "자외선 래시가드·방수팩(폰)",
+   "원하는 네일 디자인 사진 저장 (니에나)",
+   "편한 신발 (1·2일차 도보 많음)",
+ ]},
+ {h:"🧳 짐싸기 · 남편",items:[
+   "갈아입기 쉬운 편한 옷 (마사지 자주)",
+   "하이패스 카드 잔액·차량 점검(타이어·워셔액)",
+   "운전면허증 (주차장 차량 인계)",
+ ]},
+ {h:"🗓️ Day별 리마인더 (여행 중)",items:[
+   {pin:"D1",t:"입국 패스트트랙·픽업·유심 / 체크인 가볍게(16시 전) / 니에나 18:30 전 / 목꽌 랍스터 반반"},
+   {pin:"D2",t:"아내 멀미약(호핑 30분 전) / 숙소 짐만·스파 수면 / 피자 예약시간 / 쇼핑 21시 전"},
+   {pin:"D3",t:"체크아웃·안어이 점심 / 깜란 40분(멀미약) / 하프보드·야식 과일"},
+   {pin:"D4",t:"풀·비치·머드스파 / K10 예약 or 배달K / 외부음식 수령위치 프런트 확인"},
+   {pin:"D5",t:"베나자 짐보관+풋스파 / 안토이2·수블라키·포나가르(17:30) / 롯데 견과·소스 / 풋스파 무료 샌딩 / 반미 기내포장 / 3시간 전 도착 / 동(VND) 소진"},
+   {pin:"귀국",t:"주차장 셔틀/픽업 전화(05:00~) / 차량 외관 확인 / 대구 1시간10분 졸음운전 주의"},
+ ]},
+];
+
+/* ---- checkbox persistence (safe) ---- */
+function loadChecks(){try{return JSON.parse(localStorage.getItem('nt_checks')||'{}');}catch(e){return {};}}
+let CHECKS=loadChecks();
+function saveCheck(id,v){CHECKS[id]=v;try{localStorage.setItem('nt_checks',JSON.stringify(CHECKS));}catch(e){}}
+
+/* ---- map (optional; degrades gracefully if Leaflet/tiles blocked) ---- */
+var MAP=null, routeLayer=null, markerByKey={}, MAPOK=false;
+const isNT=l=>l[0]>10&&l[0]<14;
+try{
+  if(typeof L!=='undefined'){
+    MAP=L.map('map',{zoomControl:true,attributionControl:true}).setView([12.24,109.19],13);
+    L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png',{attribution:'&copy; OpenStreetMap &copy; CARTO',subdomains:'abcd',maxZoom:19}).addTo(MAP);
+    routeLayer=L.layerGroup().addTo(MAP);
+    MAPOK=true;
+  }
+}catch(e){MAPOK=false;}
+if(!MAPOK){
+  var mEl=document.getElementById('map');
+  if(mEl){mEl.style.height='0';}
+  var rt=document.getElementById('routeTitle');if(rt)rt.textContent='지도 미지원 (앱 미리보기) · 브라우저에서 열면 표시';
+  var tg=document.getElementById('toggleMap');if(tg)tg.style.display='none';
+}
+function renderRoute(di){
+  if(!MAPOK)return;
+  routeLayer.clearLayers();markerByKey={};
+  const day=DATA[di],pts=[];let n=0;
+  day.slots.forEach((s,si)=>{
+    if(!s.loc)return;n++;s.__n=n;if(!isNT(s.loc))return;pts.push(s.loc);
+    const icon=L.divIcon({className:'',html:`<div class="num-marker${s.key?'':' soft'}">${n}</div>`,iconSize:[26,26],iconAnchor:[13,13]});
+    const m=L.marker(s.loc,{icon}).addTo(routeLayer).bindPopup(`<b>${n}.</b> ${s.title}<br><span style="color:#a8a29a">${s.t}</span>`);
+    m.on('click',()=>{const el=document.getElementById(`s_${di}_${si}`);if(el){el.scrollIntoView({behavior:'smooth',block:'center'});flash(el);}});
+    markerByKey[`${di}_${si}`]=m;
+  });
+  if(pts.length>1)L.polyline(pts,{color:'#E8600A',weight:3,opacity:.7,dashArray:'7 9',lineCap:'round'}).addTo(routeLayer);
+  if(pts.length)MAP.fitBounds(L.latLngBounds(pts).pad(0.18),{animate:false});
+  const rt=document.getElementById('routeTitle');if(rt)rt.textContent=`DAY ${day.no} · 동선`;
+}
+function mapInvalidate(){if(MAPOK&&MAP)setTimeout(()=>{try{MAP.invalidateSize();}catch(e){}},60);}
+function flash(c){c.classList.add('flash');setTimeout(()=>c.classList.remove('flash'),1200);}
+
+/* ---- itinerary list ---- */
+const app=document.getElementById('app'),daysNav=document.getElementById('days');
+DATA.forEach((day,di)=>{
+  const pill=document.createElement('a');pill.href='#';pill.className='day-pill'+(di===0?' active':'');pill.textContent=`DAY ${day.no}`;pill.dataset.i=di;
+  pill.addEventListener('click',e=>{e.preventDefault();setActive(di);document.getElementById(`day${day.no}`).scrollIntoView({behavior:'smooth'});});
+  daysNav.appendChild(pill);
+  const sec=document.createElement('section');sec.className='day';sec.id=`day${day.no}`;
+  sec.innerHTML=`<div class="day-head"><div class="day-no">${day.no}</div><div class="day-info"><div class="date">${day.date}</div><div class="theme">${day.theme}</div></div></div><div class="day-line"></div>`;
+  let n=0;
+  day.slots.forEach((s,si)=>{
+    const has=!!s.loc;if(has)n++;const num=has?n:'·';
+    const slot=document.createElement('div');slot.className='slot'+(s.key?' key':'')+(has?' has':'');slot.id=`s_${di}_${si}`;
+    const tag=s.tag?`<span class="tag">${s.tag}</span>`:'';const cost=s.cost?`<span class="cost">${s.cost}</span>`:'';
+    const go=has?`<a class="go" href="https://www.google.com/maps/search/?api=1&query=${s.loc[0]},${s.loc[1]}" target="_blank" rel="noopener" onclick="event.stopPropagation()">🧭</a>`:'';
+    slot.innerHTML=`<div class="num">${num}</div><div class="card ${has?'has':''}"><span class="emoji">${s.e}</span><div class="c-body"><div class="time">${s.t}</div><div class="title">${s.title}${tag}</div>${s.d?`<div class="desc">${s.d}</div>`:''}${cost}</div>${go}</div>`;
+    sec.appendChild(slot);
+    if(has)slot.querySelector('.card').addEventListener('click',()=>{if(MAPOK){const m=markerByKey[`${di}_${si}`];if(m){MAP.setView(s.loc,16,{animate:true});m.openPopup();}else{MAP.setView(s.loc,9,{animate:true});}}flash(slot.querySelector('.card'));});
+  });
+  app.appendChild(sec);
+});
+const pills=[...document.querySelectorAll('.day-pill')];let curDay=0;renderRoute(0);
+function setActive(i){if(i!==curDay){curDay=i;renderRoute(i);mapInvalidate();}pills.forEach(p=>p.classList.toggle('active',+p.dataset.i===i));}
+try{
+  const io=new IntersectionObserver(es=>{es.forEach(e=>{if(e.isIntersecting){const i=DATA.findIndex(d=>`day${d.no}`===e.target.id);if(i>=0)setActive(i);}});},{rootMargin:'-410px 0px -45% 0px'});
+  [...document.querySelectorAll('.day')].forEach(s=>io.observe(s));
+}catch(e){}
+const tgBtn=document.getElementById('toggleMap');
+if(tgBtn)tgBtn.addEventListener('click',function(){const st=document.getElementById('sticky'),c=st.classList.toggle('collapsed');this.textContent=c?'지도 펼치기 ▾':'지도 접기 ▴';if(!c)mapInvalidate();});
+
+/* ---- checklist render ---- */
+function renderChecklist(data,mountId,prefix,fillId,txtId){
+  const mount=document.getElementById(mountId);let total=0;
+  data.forEach((sec,sx)=>{
+    const h=document.createElement('div');h.className='sec';
+    h.innerHTML=`<div class="sec-h">${sec.h}</div>`;
+    sec.items.forEach((it,ix)=>{
+      const sub=typeof it==='object'&&it.sub;const pin=typeof it==='object'&&it.pin?`<span class="day-pin">${it.pin}</span>`:'';
+      const txt=typeof it==='object'?it.t:it;const id=`${prefix}_${sx}_${ix}`;total++;
+      const checked=CHECKS[id]?'checked':'';
+      const row=document.createElement('label');row.className='chk'+(sub?' sub':'')+(CHECKS[id]?' done':'');row.setAttribute('for',id);
+      row.innerHTML=`<input type="checkbox" id="${id}" ${checked}><label for="${id}">${pin}${txt}</label>`;
+      const box=row.querySelector('input');
+      box.addEventListener('change',()=>{saveCheck(id,box.checked);row.classList.toggle('done',box.checked);updateProg(data,prefix,fillId,txtId);});
+      h.appendChild(row);
+    });
+    mount.appendChild(h);
+  });
+  updateProg(data,prefix,fillId,txtId);
+}
+function updateProg(data,prefix,fillId,txtId){
+  let total=0,done=0;
+  data.forEach((sec,sx)=>sec.items.forEach((it,ix)=>{total++;if(CHECKS[`${prefix}_${sx}_${ix}`])done++;}));
+  const pct=total?Math.round(done/total*100):0;
+  document.getElementById(fillId).style.width=pct+'%';
+  document.getElementById(txtId).textContent=`${done} / ${total} 완료 · ${pct}%`;
+}
+renderChecklist(TODO,'todo','t','fill-todo','txt-todo');
+renderChecklist(CHECK,'check','c','fill-check','txt-check');
+
+/* ---- tabs ---- */
+document.querySelectorAll('.tab').forEach(tab=>{
+  tab.addEventListener('click',()=>{
+    document.querySelectorAll('.tab').forEach(t=>t.classList.remove('active'));
+    document.querySelectorAll('.panel').forEach(p=>p.classList.remove('active'));
+    tab.classList.add('active');
+    const id=tab.dataset.tab;document.getElementById('panel-'+id).classList.add('active');
+    if(id==='itin')mapInvalidate();
+    window.scrollTo({top:0,behavior:'instant'});
+  });
+});
+mapInvalidate();
+</script>
+</body>
+</html>
