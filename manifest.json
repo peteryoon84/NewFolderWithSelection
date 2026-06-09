@@ -1,0 +1,10 @@
+{
+  "name": "나트랑 4박6일",
+  "short_name": "나트랑",
+  "description": "2026.06.29–07.04 · 일정 & 체크리스트",
+  "start_url": "./index.html",
+  "display": "standalone",
+  "background_color": "#0a0a0a",
+  "theme_color": "#E8600A",
+  "icons": [{"src": "icon.svg", "sizes": "any", "type": "image/svg+xml"}]
+}

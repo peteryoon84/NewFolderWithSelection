@@ -4,6 +4,11 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>나트랑 4박6일 · 일정 & 체크리스트</title>
+<link rel="manifest" href="manifest.json">
+<meta name="theme-color" content="#E8600A">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="나트랑">
 <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"/>
 <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
 <link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/orioncactus/pretendard@v1.3.9/dist/web/static/pretendard.css">
@@ -102,9 +107,13 @@
   .chk.sub{margin-left:24px;background:transparent;border-style:dashed}
   .chk .day-pin{font-family:var(--mono);font-size:10px;font-weight:700;color:var(--accent);margin-right:5px}
   footer{text-align:center;margin-top:46px;padding-top:18px;border-top:1px solid var(--line);font-family:var(--mono);font-size:10px;letter-spacing:.14em;color:var(--ink3);line-height:1.8}
+  .offline-bar{position:fixed;top:0;left:0;right:0;z-index:999;background:#7f1d1d;color:#fca5a5;font-family:var(--mono);font-size:11px;text-align:center;padding:6px;display:none;letter-spacing:.06em}
+  .offline-bar.show{display:block}
+  .save-btn.saving{opacity:.5;pointer-events:none}
 </style>
 </head>
 <body>
+<div class="offline-bar" id="offlineBar">📵 오프라인 모드 · 저장된 지도만 표시됩니다</div>
 <div class="wrap">
   <header>
     <div class="kicker">Nha Trang · 4N6D</div>
@@ -123,6 +132,7 @@
       <div class="map-bar">
         <span class="route-title" id="routeTitle">DAY 01 · 동선</span>
         <div style="display:flex;gap:6px">
+          <button id="saveMapBtn" class="save-btn">💾</button>
           <button id="selBtn" class="sel-btn">선택</button>
           <button id="toggleMap">지도 접기 ▴</button>
         </div>
@@ -451,6 +461,57 @@ document.querySelectorAll('.tab').forEach(tab=>{
   });
 });
 mapInvalidate();
+
+/* ---- PWA ---- */
+function tileCrd(lat, lng, z) {
+  const x = Math.floor((lng + 180) / 360 * (1 << z));
+  const r = lat * Math.PI / 180;
+  const y = Math.floor((1 - Math.log(Math.tan(r) + 1 / Math.cos(r)) / Math.PI) / 2 * (1 << z));
+  return {x, y};
+}
+function buildTileUrls() {
+  const areas = [
+    {n:12.30, s:12.17, w:109.16, e:109.23}, // 나트랑 시내
+    {n:12.13, s:11.93, w:109.16, e:109.23}, // 깜란
+  ];
+  const subs = ['a','b','c','d'], urls = [];
+  for (const z of [12, 13, 14, 15]) {
+    for (const a of areas) {
+      const tl = tileCrd(a.n, a.w, z), br = tileCrd(a.s, a.e, z);
+      for (let x = tl.x; x <= br.x; x++)
+        for (let y = tl.y; y <= br.y; y++)
+          urls.push(`https://${subs[(x+y)%4]}.basemaps.cartocdn.com/dark_all/${z}/${x}/${y}.png`);
+    }
+  }
+  return urls;
+}
+
+const saveMapBtn = document.getElementById('saveMapBtn');
+if (saveMapBtn && 'serviceWorker' in navigator) {
+  saveMapBtn.addEventListener('click', async () => {
+    const reg = await navigator.serviceWorker.ready;
+    if (!reg.active) return;
+    const urls = buildTileUrls();
+    saveMapBtn.textContent = `⏳ ${urls.length}개`;
+    saveMapBtn.classList.add('saving');
+    reg.active.postMessage({type: 'CACHE_TILES', urls});
+  });
+  navigator.serviceWorker.addEventListener('message', e => {
+    if (e.data.type === 'TILES_CACHED') {
+      saveMapBtn.textContent = '✅';
+      saveMapBtn.classList.remove('saving');
+      setTimeout(() => { saveMapBtn.textContent = '💾'; }, 4000);
+    }
+  });
+}
+
+window.addEventListener('online',  () => document.getElementById('offlineBar').classList.remove('show'));
+window.addEventListener('offline', () => document.getElementById('offlineBar').classList.add('show'));
+if (!navigator.onLine) document.getElementById('offlineBar').classList.add('show');
+
+if ('serviceWorker' in navigator) {
+  window.addEventListener('load', () => navigator.serviceWorker.register('./sw.js'));
+}
 </script>
 <button class="nav-float" id="navFloat">🧭 길찾기</button>
 </body>
