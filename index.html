@@ -78,6 +78,12 @@
   .desc{font-size:12.5px;color:var(--ink2);margin-top:3px}
   .cost{display:inline-block;font-family:var(--mono);font-size:11px;color:var(--gold);margin-top:6px}
   .go{flex:0 0 auto;color:var(--ink3);font-size:15px;text-decoration:none;padding:2px}
+  .card{position:relative}
+  .card.selected{border-color:var(--accent);background:#201208;box-shadow:0 0 0 2px rgba(232,96,10,.15)}
+  .sel-badge{position:absolute;top:-8px;right:-8px;width:22px;height:22px;border-radius:50%;background:var(--accent);color:#000;font-family:var(--mono);font-size:11px;font-weight:700;display:flex;align-items:center;justify-content:center;border:2px solid var(--bg);pointer-events:none;z-index:2}
+  .sel-btn.on{background:var(--accent)!important;color:#000!important;border-color:var(--accent)!important}
+  .nav-float{position:fixed;bottom:24px;left:50%;z-index:200;background:var(--accent);color:#000;font-family:var(--mono);font-weight:700;font-size:13px;letter-spacing:.03em;border:none;border-radius:999px;padding:13px 28px;cursor:pointer;box-shadow:0 4px 24px rgba(232,96,10,.55);white-space:nowrap;opacity:0;pointer-events:none;transition:opacity .2s,transform .2s;transform:translateX(-50%) translateY(10px)}
+  .nav-float.show{opacity:1;pointer-events:auto;transform:translateX(-50%) translateY(0)}
 
   /* checklist */
   .prog{position:sticky;top:47px;z-index:40;background:var(--bg);padding:12px 0 8px;margin-bottom:4px}
@@ -116,7 +122,10 @@
     <div class="sticky" id="sticky">
       <div class="map-bar">
         <span class="route-title" id="routeTitle">DAY 01 · 동선</span>
-        <button id="toggleMap">지도 접기 ▴</button>
+        <div style="display:flex;gap:6px">
+          <button id="selBtn" class="sel-btn">선택</button>
+          <button id="toggleMap">지도 접기 ▴</button>
+        </div>
       </div>
       <div id="map"></div>
       <div class="days" id="days"></div>
@@ -351,7 +360,11 @@ DATA.forEach((day,di)=>{
     const go=has?`<a class="go" href="https://www.google.com/maps/search/?api=1&query=${s.loc[0]},${s.loc[1]}" target="_blank" rel="noopener" onclick="event.stopPropagation()">🧭</a>`:'';
     slot.innerHTML=`<div class="num">${num}</div><div class="card ${has?'has':''}"><span class="emoji">${s.e}</span><div class="c-body"><div class="time">${s.t}</div><div class="title">${s.title}${tag}</div>${s.d?`<div class="desc">${s.d}</div>`:''}${cost}</div>${go}</div>`;
     sec.appendChild(slot);
-    if(has)slot.querySelector('.card').addEventListener('click',()=>{if(MAPOK){const m=markerByKey[`${di}_${si}`];if(m){MAP.setView(s.loc,16,{animate:true});m.openPopup();}else{MAP.setView(s.loc,9,{animate:true});}}flash(slot.querySelector('.card'));});
+    if(has)slot.querySelector('.card').addEventListener('click',()=>{
+      if(selectMode){toggleSel(di,si,s.loc,slot.querySelector('.card'));return;}
+      if(MAPOK){const m=markerByKey[`${di}_${si}`];if(m){MAP.setView(s.loc,16,{animate:true});m.openPopup();}else{MAP.setView(s.loc,9,{animate:true});}}
+      flash(slot.querySelector('.card'));
+    });
   });
   app.appendChild(sec);
 });
@@ -363,6 +376,38 @@ try{
 }catch(e){}
 const tgBtn=document.getElementById('toggleMap');
 if(tgBtn)tgBtn.addEventListener('click',function(){const st=document.getElementById('sticky'),c=st.classList.toggle('collapsed');this.textContent=c?'지도 펼치기 ▾':'지도 접기 ▴';if(!c)mapInvalidate();});
+
+/* ---- multi-select navigation ---- */
+let selectMode=false;
+const selSlots=[];
+function toggleSel(di,si,loc,cardEl){
+  const key=`${di},${si}`;
+  const idx=selSlots.findIndex(s=>s.key===key);
+  if(idx>=0){selSlots.splice(idx,1);}else{selSlots.push({key,loc,cardEl});}
+  rebadge();syncNavBtn();
+}
+function rebadge(){
+  document.querySelectorAll('.card.selected').forEach(c=>{c.classList.remove('selected');const b=c.querySelector('.sel-badge');if(b)b.remove();});
+  selSlots.forEach((s,i)=>{s.cardEl.classList.add('selected');const b=document.createElement('div');b.className='sel-badge';b.textContent=i+1;s.cardEl.appendChild(b);});
+}
+function syncNavBtn(){
+  const btn=document.getElementById('navFloat');if(!btn)return;
+  if(selSlots.length){btn.textContent=`🧭 길찾기 (${selSlots.length}곳)`;btn.classList.add('show');}
+  else{btn.classList.remove('show');}
+}
+const selBtn=document.getElementById('selBtn');
+if(selBtn)selBtn.addEventListener('click',()=>{
+  selectMode=!selectMode;
+  selBtn.classList.toggle('on',selectMode);
+  selBtn.textContent=selectMode?'취소':'선택';
+  if(!selectMode){selSlots.length=0;rebadge();syncNavBtn();}
+});
+const navFloat=document.getElementById('navFloat');
+if(navFloat)navFloat.addEventListener('click',()=>{
+  if(!selSlots.length)return;
+  const url='https://www.google.com/maps/dir/'+selSlots.map(s=>s.loc[0]+','+s.loc[1]).join('/');
+  window.open(url,'_blank','noopener');
+});
 
 /* ---- checklist render ---- */
 function renderChecklist(data,mountId,prefix,fillId,txtId){
@@ -407,5 +452,6 @@ document.querySelectorAll('.tab').forEach(tab=>{
 });
 mapInvalidate();
 </script>
+<button class="nav-float" id="navFloat">🧭 길찾기</button>
 </body>
 </html>
