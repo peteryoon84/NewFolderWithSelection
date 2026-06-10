@@ -110,6 +110,40 @@
   .offline-bar{position:fixed;top:0;left:0;right:0;z-index:999;background:#7f1d1d;color:#fca5a5;font-family:var(--mono);font-size:11px;text-align:center;padding:6px;display:none;letter-spacing:.06em}
   .offline-bar.show{display:block}
   .save-btn.saving{opacity:.5;pointer-events:none}
+  /* edit mode */
+  .edit-controls{display:none;gap:4px;align-items:center}
+  .edit-mode .edit-controls{display:flex}
+  .edit-btn,.del-btn{background:none;border:none;cursor:pointer;padding:3px 5px;font-size:14px;line-height:1;border-radius:5px;transition:.15s}
+  .edit-btn:hover{background:rgba(232,96,10,.18)}
+  .del-btn:hover{background:rgba(239,68,68,.18)}
+  .add-slot-btn{display:none;width:100%;margin:8px 0 18px;background:none;border:1px dashed var(--line);color:var(--ink3);font-family:var(--mono);font-size:12px;padding:9px;border-radius:10px;cursor:pointer;transition:.15s}
+  .add-slot-btn:hover{border-color:var(--accent);color:var(--accent)}
+  .edit-mode .add-slot-btn{display:block}
+  .edit-mode-btn.on{background:var(--accent)!important;color:#000!important;border-color:var(--accent)!important}
+  /* modal */
+  .modal-overlay{display:none;position:fixed;inset:0;z-index:300;background:rgba(0,0,0,.75);backdrop-filter:blur(3px);align-items:flex-start;justify-content:center;padding:20px;overflow-y:auto}
+  .modal-overlay.show{display:flex}
+  .modal{background:var(--bg2);border:1px solid var(--line);border-radius:16px;width:100%;max-width:480px;padding:20px;margin:auto}
+  .modal-ttl{font-family:var(--mono);font-size:13px;letter-spacing:.08em;color:var(--accent);margin-bottom:16px;font-weight:700}
+  .form-row{margin-bottom:11px}
+  .form-row>label{display:block;font-family:var(--mono);font-size:10px;letter-spacing:.08em;color:var(--ink3);margin-bottom:4px}
+  .form-row input,.form-row textarea{width:100%;background:var(--card);border:1px solid var(--line);border-radius:8px;color:var(--ink);font-family:var(--sans);font-size:13px;padding:8px 10px;outline:none;transition:.15s}
+  .form-row input:focus,.form-row textarea:focus{border-color:var(--accent)}
+  .form-row textarea{resize:vertical;min-height:60px;line-height:1.5}
+  .srch-row{display:flex;gap:6px}
+  .srch-btn{background:var(--card);border:1px solid var(--line);border-radius:8px;color:var(--ink2);font-family:var(--mono);font-size:11px;padding:8px 12px;cursor:pointer;white-space:nowrap;flex:0 0 auto}
+  .srch-btn:hover{border-color:var(--accent);color:var(--accent)}
+  .srch-res{margin-top:4px;margin-bottom:4px}
+  .sr-item{padding:8px 10px;background:var(--card);border:1px solid var(--line);border-radius:8px;margin-bottom:6px;cursor:pointer;transition:.15s}
+  .sr-item:hover,.sr-item.picked{border-color:var(--accent);background:#201208}
+  .sr-name{font-size:12px;color:var(--ink);line-height:1.3}
+  .sr-coord{font-family:var(--mono);font-size:10px;color:var(--ink3);margin-top:2px}
+  .loc-chip{font-family:var(--mono);font-size:11px;color:var(--green);padding:5px 8px;background:rgba(76,175,80,.08);border:1px solid rgba(76,175,80,.3);border-radius:7px;margin-bottom:8px}
+  .modal-btns{display:flex;gap:8px;margin-top:16px;flex-wrap:wrap;align-items:center}
+  .mbtn{font-family:var(--mono);font-size:12px;font-weight:700;border-radius:8px;padding:9px 16px;cursor:pointer;border:1px solid var(--line);transition:.15s}
+  .mbtn-cancel{background:var(--card);color:var(--ink2)}
+  .mbtn-save{background:var(--accent);color:#000;border-color:var(--accent);margin-left:auto}
+  .mbtn-reset{background:none;color:#f87171;border-color:rgba(239,68,68,.4)}
 </style>
 </head>
 <body>
@@ -133,6 +167,7 @@
         <span class="route-title" id="routeTitle">DAY 01 · 동선</span>
         <div style="display:flex;gap:6px">
           <button id="saveMapBtn" class="save-btn">💾</button>
+          <button id="editModeBtn" class="edit-mode-btn">✏️ 편집</button>
           <button id="selBtn" class="sel-btn">선택</button>
           <button id="toggleMap">지도 접기 ▴</button>
         </div>
@@ -347,7 +382,7 @@ if(!MAPOK){
 function renderRoute(di){
   if(!MAPOK)return;
   routeLayer.clearLayers();markerByKey={};
-  const day=DATA[di],pts=[];let n=0;
+  const day=LIVE_DATA[di],pts=[];let n=0;
   day.slots.forEach((s,si)=>{
     if(!s.loc)return;n++;s.__n=n;if(!isNT(s.loc))return;pts.push(s.loc);
     const icon=L.divIcon({className:'',html:`<div class="num-marker${s.key?'':' soft'}">${n}</div>`,iconSize:[26,26],iconAnchor:[13,13]});
@@ -362,41 +397,16 @@ function renderRoute(di){
 function mapInvalidate(){if(MAPOK&&MAP)setTimeout(()=>{try{MAP.invalidateSize();}catch(e){}},60);}
 function flash(c){c.classList.add('flash');setTimeout(()=>c.classList.remove('flash'),1200);}
 
-/* ---- itinerary list ---- */
-const app=document.getElementById('app'),daysNav=document.getElementById('days');
-DATA.forEach((day,di)=>{
-  const pill=document.createElement('a');pill.href='#';pill.className='day-pill'+(di===0?' active':'');pill.textContent=`DAY ${day.no}`;pill.dataset.i=di;
-  pill.addEventListener('click',e=>{e.preventDefault();setActive(di);document.getElementById(`day${day.no}`).scrollIntoView({behavior:'smooth'});});
-  daysNav.appendChild(pill);
-  const sec=document.createElement('section');sec.className='day';sec.id=`day${day.no}`;
-  sec.innerHTML=`<div class="day-head"><div class="day-no">${day.no}</div><div class="day-info"><div class="date">${day.date}</div><div class="theme">${day.theme}</div></div></div><div class="day-line"></div>`;
-  let n=0;
-  day.slots.forEach((s,si)=>{
-    const has=!!s.loc;if(has)n++;const num=has?n:'·';
-    const slot=document.createElement('div');slot.className='slot'+(s.key?' key':'')+(has?' has':'');slot.id=`s_${di}_${si}`;
-    const tag=s.tag?`<span class="tag">${s.tag}</span>`:'';const cost=s.cost?`<span class="cost">${s.cost}</span>`:'';
-    const go=has?`<a class="go" href="https://www.google.com/maps/search/?api=1&query=${s.loc[0]},${s.loc[1]}" target="_blank" rel="noopener" onclick="event.stopPropagation()">🧭</a>`:'';
-    slot.innerHTML=`<div class="num">${num}</div><div class="card ${has?'has':''}"><span class="emoji">${s.e}</span><div class="c-body"><div class="time">${s.t}</div><div class="title">${s.title}${tag}</div>${s.d?`<div class="desc">${s.d}</div>`:''}${cost}</div>${go}</div>`;
-    sec.appendChild(slot);
-    if(has)slot.querySelector('.card').addEventListener('click',()=>{
-      if(selectMode){toggleSel(di,si,s.loc,slot.querySelector('.card'));return;}
-      if(MAPOK){const m=markerByKey[`${di}_${si}`];if(m){MAP.setView(s.loc,16,{animate:true});m.openPopup();}else{MAP.setView(s.loc,9,{animate:true});}}
-      flash(slot.querySelector('.card'));
-    });
-  });
-  app.appendChild(sec);
-});
-const pills=[...document.querySelectorAll('.day-pill')];let curDay=0;renderRoute(0);
-function setActive(i){if(i!==curDay){curDay=i;renderRoute(i);mapInvalidate();}pills.forEach(p=>p.classList.toggle('active',+p.dataset.i===i));}
-try{
-  const io=new IntersectionObserver(es=>{es.forEach(e=>{if(e.isIntersecting){const i=DATA.findIndex(d=>`day${d.no}`===e.target.id);if(i>=0)setActive(i);}});},{rootMargin:'-410px 0px -45% 0px'});
-  [...document.querySelectorAll('.day')].forEach(s=>io.observe(s));
-}catch(e){}
-const tgBtn=document.getElementById('toggleMap');
-if(tgBtn)tgBtn.addEventListener('click',function(){const st=document.getElementById('sticky'),c=st.classList.toggle('collapsed');this.textContent=c?'지도 펼치기 ▾':'지도 접기 ▴';if(!c)mapInvalidate();});
+/* ---- LIVE_DATA persistence ---- */
+let LIVE_DATA;
+(function(){
+  try{const s=localStorage.getItem('nt_itin');if(s){LIVE_DATA=JSON.parse(s);return;}}catch(e){}
+  LIVE_DATA=JSON.parse(JSON.stringify(DATA));
+})();
+function saveItinData(){try{localStorage.setItem('nt_itin',JSON.stringify(LIVE_DATA));}catch(e){}}
 
-/* ---- multi-select navigation ---- */
-let selectMode=false;
+/* ---- selection helpers (declared before renderApp) ---- */
+let selectMode=false,editMode=false;
 const selSlots=[];
 function toggleSel(di,si,loc,cardEl){
   const key=`${di},${si}`;
@@ -413,6 +423,61 @@ function syncNavBtn(){
   if(selSlots.length){btn.textContent=`🧭 길찾기 (${selSlots.length}곳)`;btn.classList.add('show');}
   else{btn.classList.remove('show');}
 }
+
+/* ---- itinerary render ---- */
+let _mState={di:-1,si:-1,isNew:true,loc:null},curDay=0,_io=null;
+function renderApp(){
+  const appEl=document.getElementById('app'),nav=document.getElementById('days');
+  appEl.innerHTML='';nav.innerHTML='';
+  LIVE_DATA.forEach((day,di)=>{
+    const pill=document.createElement('a');pill.href='#';pill.className='day-pill'+(di===curDay?' active':'');pill.textContent=`DAY ${day.no}`;pill.dataset.i=di;
+    pill.addEventListener('click',e=>{e.preventDefault();setActive(di);document.getElementById(`day${day.no}`).scrollIntoView({behavior:'smooth'});});
+    nav.appendChild(pill);
+    const sec=document.createElement('section');sec.className='day';sec.id=`day${day.no}`;
+    sec.innerHTML=`<div class="day-head"><div class="day-no">${day.no}</div><div class="day-info"><div class="date">${day.date}</div><div class="theme">${day.theme}</div></div></div><div class="day-line"></div>`;
+    let n=0;
+    day.slots.forEach((s,si)=>{
+      const has=!!s.loc;if(has)n++;const num=has?n:'·';
+      const slot=document.createElement('div');slot.className='slot'+(s.key?' key':'')+(has?' has':'');slot.id=`s_${di}_${si}`;
+      const tag=s.tag?`<span class="tag">${s.tag}</span>`:'';const cost=s.cost?`<span class="cost">${s.cost}</span>`:'';
+      const go=has?`<a class="go" href="https://www.google.com/maps/search/?api=1&query=${s.loc[0]},${s.loc[1]}" target="_blank" rel="noopener" onclick="event.stopPropagation()">🧭</a>`:'';
+      slot.innerHTML=`<div class="num">${num}</div><div class="card ${has?'has':''}"><span class="emoji">${s.e}</span><div class="c-body"><div class="time">${s.t}</div><div class="title">${s.title}${tag}</div>${s.d?`<div class="desc">${s.d}</div>`:''}${cost}</div>${go}<div class="edit-controls"><button class="edit-btn" onclick="openEditModal(${di},${si});event.stopPropagation()">✏️</button><button class="del-btn" onclick="confirmDel(${di},${si});event.stopPropagation()">🗑️</button></div></div>`;
+      sec.appendChild(slot);
+      if(has)slot.querySelector('.card').addEventListener('click',()=>{
+        if(selectMode){toggleSel(di,si,s.loc,slot.querySelector('.card'));return;}
+        if(MAPOK){const m=markerByKey[`${di}_${si}`];if(m){MAP.setView(s.loc,16,{animate:true});m.openPopup();}else{MAP.setView(s.loc,9,{animate:true});}}
+        flash(slot.querySelector('.card'));
+      });
+    });
+    const addBtn=document.createElement('button');addBtn.className='add-slot-btn';addBtn.textContent='+ 장소 추가';
+    addBtn.addEventListener('click',()=>openAddModal(di));
+    sec.appendChild(addBtn);
+    appEl.appendChild(sec);
+  });
+  if(_io){try{_io.disconnect();}catch(e){}}
+  try{
+    _io=new IntersectionObserver(es=>{es.forEach(e=>{if(e.isIntersecting){const i=LIVE_DATA.findIndex(d=>`day${d.no}`===e.target.id);if(i>=0)setActive(i);}});},{rootMargin:'-410px 0px -45% 0px'});
+    [...document.querySelectorAll('.day')].forEach(s=>_io.observe(s));
+  }catch(e){}
+  document.body.classList.toggle('edit-mode',editMode);
+  selSlots.length=0;syncNavBtn();
+}
+function setActive(i){
+  if(i!==curDay){curDay=i;renderRoute(i);mapInvalidate();}
+  document.querySelectorAll('.day-pill').forEach(p=>p.classList.toggle('active',+p.dataset.i===i));
+}
+renderApp();renderRoute(0);
+
+/* ---- button listeners ---- */
+const tgBtn=document.getElementById('toggleMap');
+if(tgBtn)tgBtn.addEventListener('click',function(){const st=document.getElementById('sticky'),c=st.classList.toggle('collapsed');this.textContent=c?'지도 펼치기 ▾':'지도 접기 ▴';if(!c)mapInvalidate();});
+const editModeBtn=document.getElementById('editModeBtn');
+if(editModeBtn)editModeBtn.addEventListener('click',()=>{
+  editMode=!editMode;
+  document.body.classList.toggle('edit-mode',editMode);
+  editModeBtn.textContent=editMode?'✏️ 완료':'✏️ 편집';
+  editModeBtn.classList.toggle('on',editMode);
+});
 const selBtn=document.getElementById('selBtn');
 if(selBtn)selBtn.addEventListener('click',()=>{
   selectMode=!selectMode;
@@ -426,6 +491,89 @@ if(navFloat)navFloat.addEventListener('click',()=>{
   const url='https://www.google.com/maps/dir/'+selSlots.map(s=>s.loc[0]+','+s.loc[1]).join('/');
   window.open(url,'_blank','noopener');
 });
+
+/* ---- modal / edit functions ---- */
+function openAddModal(di){
+  _mState={di,si:-1,isNew:true,loc:null};
+  document.getElementById('mTime').value='';
+  document.getElementById('mEmoji').value='📍';
+  document.getElementById('mTitle').value='';
+  document.getElementById('mTag').value='';
+  document.getElementById('mDesc').value='';
+  document.getElementById('mCost').value='';
+  document.getElementById('mSearchQ').value='';
+  document.getElementById('mSrchRes').innerHTML='';
+  document.getElementById('mLocChip').style.display='none';
+  document.getElementById('mModalTtl').textContent='장소 추가';
+  document.getElementById('modalOverlay').classList.add('show');
+}
+function openEditModal(di,si){
+  const s=LIVE_DATA[di].slots[si];
+  _mState={di,si,isNew:false,loc:s.loc||null};
+  document.getElementById('mTime').value=s.t||'';
+  document.getElementById('mEmoji').value=s.e||'📍';
+  document.getElementById('mTitle').value=s.title||'';
+  document.getElementById('mTag').value=s.tag||'';
+  document.getElementById('mDesc').value=s.d||'';
+  document.getElementById('mCost').value=s.cost||'';
+  document.getElementById('mSearchQ').value='';
+  document.getElementById('mSrchRes').innerHTML='';
+  const chip=document.getElementById('mLocChip');
+  if(s.loc){chip.textContent=`📍 ${s.loc[0].toFixed(5)}, ${s.loc[1].toFixed(5)}`;chip.style.display='block';}
+  else{chip.style.display='none';}
+  document.getElementById('mModalTtl').textContent='장소 수정';
+  document.getElementById('modalOverlay').classList.add('show');
+}
+function closeModal(){document.getElementById('modalOverlay').classList.remove('show');}
+function saveModal(){
+  const title=document.getElementById('mTitle').value.trim();
+  if(!title){alert('장소명을 입력하세요.');return;}
+  const slot={t:document.getElementById('mTime').value.trim()||'–',e:document.getElementById('mEmoji').value.trim()||'📍',title};
+  const tag=document.getElementById('mTag').value.trim();if(tag)slot.tag=tag;
+  const d=document.getElementById('mDesc').value.trim();if(d)slot.d=d;
+  const cost=document.getElementById('mCost').value.trim();if(cost)slot.cost=cost;
+  if(_mState.loc)slot.loc=_mState.loc;
+  const{di,si,isNew}=_mState;
+  if(isNew){LIVE_DATA[di].slots.push(slot);}
+  else{if(LIVE_DATA[di].slots[si].key)slot.key=LIVE_DATA[di].slots[si].key;LIVE_DATA[di].slots[si]=slot;}
+  saveItinData();closeModal();
+  const saved=curDay;renderApp();setActive(saved);renderRoute(saved);
+}
+async function runSearch(){
+  const q=document.getElementById('mSearchQ').value.trim();if(!q)return;
+  const res=document.getElementById('mSrchRes');
+  res.innerHTML='<div style="color:var(--ink3);font-size:12px;padding:4px 0">검색 중...</div>';
+  try{
+    const r=await fetch(`https://nominatim.openstreetmap.org/search?q=${encodeURIComponent(q+' Vietnam')}&format=json&limit=5`,{headers:{'Accept-Language':'ko,en'}});
+    const data=await r.json();
+    if(!data.length){res.innerHTML='<div style="color:var(--ink3);font-size:12px;padding:4px 0">결과 없음</div>';return;}
+    res.innerHTML='';
+    data.forEach(item=>{
+      const d=document.createElement('div');d.className='sr-item';
+      const name=item.display_name.split(',').slice(0,3).join(', ');
+      d.innerHTML=`<div class="sr-name">${name}</div><div class="sr-coord">${(+item.lat).toFixed(5)}, ${(+item.lon).toFixed(5)}</div>`;
+      d.addEventListener('click',()=>{
+        _mState.loc=[+item.lat,+item.lon];
+        const chip=document.getElementById('mLocChip');
+        chip.textContent=`📍 ${(+item.lat).toFixed(5)}, ${(+item.lon).toFixed(5)} · ${item.display_name.split(',')[0]}`;
+        chip.style.display='block';
+        res.querySelectorAll('.sr-item').forEach(e=>e.classList.remove('picked'));
+        d.classList.add('picked');
+      });
+      res.appendChild(d);
+    });
+  }catch(e){res.innerHTML='<div style="color:#f87171;font-size:12px;padding:4px 0">검색 오류</div>';}
+}
+function confirmDel(di,si){
+  if(!confirm(`"${LIVE_DATA[di].slots[si].title}"을(를) 삭제할까요?`))return;
+  LIVE_DATA[di].slots.splice(si,1);saveItinData();
+  const saved=curDay;renderApp();setActive(saved);renderRoute(saved);
+}
+function resetItinData(){
+  if(!confirm('편집 내용을 모두 초기화하고 원래 일정으로 되돌릴까요?'))return;
+  localStorage.removeItem('nt_itin');LIVE_DATA=JSON.parse(JSON.stringify(DATA));
+  const saved=curDay;renderApp();setActive(saved);renderRoute(saved);
+}
 
 /* ---- checklist render ---- */
 function renderChecklist(data,mountId,prefix,fillId,txtId){
@@ -522,5 +670,27 @@ if ('serviceWorker' in navigator) {
 }
 </script>
 <button class="nav-float" id="navFloat">🧭 길찾기</button>
+
+<div class="modal-overlay" id="modalOverlay">
+  <div class="modal" onclick="event.stopPropagation()">
+    <div class="modal-ttl" id="mModalTtl">장소 추가</div>
+    <div class="form-row"><label>시간</label><input id="mTime" placeholder="예) 14:00"></div>
+    <div style="display:flex;gap:8px">
+      <div class="form-row" style="flex:0 0 80px"><label>이모지</label><input id="mEmoji" placeholder="📍"></div>
+      <div class="form-row" style="flex:1"><label>태그</label><input id="mTag" placeholder="예) 예약, VIP 20%"></div>
+    </div>
+    <div class="form-row"><label>장소명 *</label><input id="mTitle" placeholder="장소·활동 이름"></div>
+    <div class="form-row"><label>메모</label><textarea id="mDesc" placeholder="상세 설명 (선택)"></textarea></div>
+    <div class="form-row"><label>비용</label><input id="mCost" placeholder="예) ≈ 30,000원 (선택)"></div>
+    <div class="form-row"><label>위치 검색</label><div class="srch-row"><input id="mSearchQ" placeholder="장소명 검색 (베트남 기준)" onkeydown="if(event.key==='Enter')runSearch()"><button class="srch-btn" onclick="runSearch()">검색</button></div></div>
+    <div id="mSrchRes" class="srch-res"></div>
+    <div id="mLocChip" class="loc-chip" style="display:none"></div>
+    <div class="modal-btns">
+      <button class="mbtn mbtn-reset" onclick="resetItinData()">↺ 전체 초기화</button>
+      <button class="mbtn mbtn-cancel" onclick="closeModal()">취소</button>
+      <button class="mbtn mbtn-save" onclick="saveModal()">저장</button>
+    </div>
+  </div>
+</div>
 </body>
 </html>
