@@ -10,6 +10,9 @@
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <meta name="apple-mobile-web-app-title" content="나트랑">
 <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"/>
+<!-- Firebase (실시간 동기화) — config 비어있으면 자동으로 로컬 단독 모드 -->
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-database-compat.js"></script>
 <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
 <link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/orioncactus/pretendard@v1.3.9/dist/web/static/pretendard.css">
 <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@500;700&display=swap" rel="stylesheet">
@@ -107,6 +110,7 @@
   .chk.sub{margin-left:24px;background:transparent;border-style:dashed}
   .chk .day-pin{font-family:var(--mono);font-size:10px;font-weight:700;color:var(--accent);margin-right:5px}
   footer{text-align:center;margin-top:46px;padding-top:18px;border-top:1px solid var(--line);font-family:var(--mono);font-size:10px;letter-spacing:.14em;color:var(--ink3);line-height:1.8}
+  .sync-dot{display:inline-block;margin-top:4px;font-size:10px;letter-spacing:.1em;color:var(--ink3)}
   .offline-bar{position:fixed;top:0;left:0;right:0;z-index:999;background:#7f1d1d;color:#fca5a5;font-family:var(--mono);font-size:11px;text-align:center;padding:6px;display:none;letter-spacing:.06em}
   .offline-bar.show{display:block}
   .save-btn.saving{opacity:.5;pointer-events:none}
@@ -225,10 +229,75 @@
     <div id="check"></div>
   </section>
 
-  <footer>NHA TRANG · STUDIO SAIRO<br>일정 장소 탭→지도 이동 · 체크는 이 브라우저에 저장됨</footer>
+  <footer>NHA TRANG · STUDIO SAIRO<br>일정 장소 탭→지도 이동 · 체크는 이 브라우저에 저장됨<br><span id="syncDot" class="sync-dot"></span></footer>
 </div>
 
 <script>
+/* ============================================================
+   🔥 FIREBASE 실시간 동기화 설정
+   ------------------------------------------------------------
+   아래 중괄호 {} 안에, 파이어베이스 콘솔에서 받은 config를
+   그대로 붙여넣으세요. (apiKey, databaseURL 등)
+   비워두면 → 이 기기에만 저장되는 "로컬 단독 모드"로 작동합니다.
+   ============================================================ */
+const FIREBASE_CONFIG = {
+  // 예시 (← 이 줄들을 지우고 본인 config로 교체):
+  // apiKey: "AIza...............",
+  // authDomain: "내프로젝트.firebaseapp.com",
+  // databaseURL: "https://내프로젝트-default-rtdb.firebaseio.com",
+  // projectId: "내프로젝트",
+  // storageBucket: "내프로젝트.appspot.com",
+  // messagingSenderId: "1234567890",
+  // appId: "1:1234:web:abcd"
+};
+
+/* ---- 실시간 동기화 엔진 (config 없으면 자동 비활성) ---- */
+const Sync=(function(){
+  let dbRef=null,ready=false,lastTs=0,firstSnap=true;
+  const applying={v:false};
+  const deviceId=(function(){
+    try{let id=localStorage.getItem('nt_dev');if(!id){id=Math.random().toString(36).slice(2)+Date.now().toString(36);localStorage.setItem('nt_dev',id);}return id;}
+    catch(e){return 'd'+Date.now();}
+  })();
+  function status(s){
+    const el=document.getElementById('syncDot');if(!el)return;
+    const map={off:'⚪ 로컬',connecting:'🔄 연결 중…',synced:'🟢 동기화됨',error:'🔴 연결 오류'};
+    el.textContent=map[s]||'';
+  }
+  function init(){
+    if(!FIREBASE_CONFIG||!FIREBASE_CONFIG.databaseURL||typeof firebase==='undefined'){status('off');return;}
+    try{
+      firebase.initializeApp(FIREBASE_CONFIG);
+      dbRef=firebase.database().ref('trip/v1');
+      status('connecting');
+      ready=true;
+      dbRef.on('value',function(snap){
+        const v=snap.val();
+        if(firstSnap){
+          firstSnap=false;
+          if(!v||!v.data){push();status('synced');return;} // 원격 비어있음 → 내 데이터로 시드
+        }
+        if(!v||!v.data)return;
+        if(v.ts<=lastTs)return;            // 더 오래된 변경 무시
+        if(v.by===deviceId)return;         // 내가 쓴 것 메아리 무시
+        lastTs=v.ts;
+        applying.v=true;
+        LIVE_DATA=v.data;
+        try{localStorage.setItem('nt_itin',JSON.stringify(LIVE_DATA));}catch(e){}
+        try{const saved=curDay;renderApp();setActive(saved);renderRoute(saved);}catch(e){}
+        applying.v=false;
+        status('synced');
+      },function(){status('error');});
+    }catch(e){status('error');}
+  }
+  function push(){
+    if(!ready||!dbRef||applying.v)return;
+    lastTs=Date.now();
+    dbRef.set({data:LIVE_DATA,ts:lastTs,by:deviceId}).then(function(){status('synced');}).catch(function(){status('error');});
+  }
+  return {init:init,push:push};
+})();
+
 /* ---- access gate (casual privacy · 소스보기로 우회 가능) ---- */
 const GATE_PW='0629';
 (function(){
@@ -440,7 +509,7 @@ let LIVE_DATA;
   try{const s=localStorage.getItem('nt_itin');if(s){LIVE_DATA=JSON.parse(s);return;}}catch(e){}
   LIVE_DATA=JSON.parse(JSON.stringify(DATA));
 })();
-function saveItinData(){try{localStorage.setItem('nt_itin',JSON.stringify(LIVE_DATA));}catch(e){}}
+function saveItinData(){try{localStorage.setItem('nt_itin',JSON.stringify(LIVE_DATA));}catch(e){}try{Sync.push();}catch(e){}}
 
 /* ---- selection helpers (declared before renderApp) ---- */
 let selectMode=false,editMode=false;
@@ -504,6 +573,7 @@ function setActive(i){
   document.querySelectorAll('.day-pill').forEach(p=>p.classList.toggle('active',+p.dataset.i===i));
 }
 renderApp();renderRoute(0);
+try{Sync.init();}catch(e){}
 
 /* ---- button listeners ---- */
 const tgBtn=document.getElementById('toggleMap');
