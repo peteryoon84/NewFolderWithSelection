@@ -91,7 +91,7 @@
   .card.selected{border-color:var(--accent);background:#201208;box-shadow:0 0 0 2px rgba(232,96,10,.15)}
   .sel-badge{position:absolute;top:-8px;right:-8px;width:22px;height:22px;border-radius:50%;background:var(--accent);color:#000;font-family:var(--mono);font-size:11px;font-weight:700;display:flex;align-items:center;justify-content:center;border:2px solid var(--bg);pointer-events:none;z-index:2}
   .sel-btn.on{background:var(--accent)!important;color:#000!important;border-color:var(--accent)!important}
-  .nav-float{position:fixed;bottom:24px;left:50%;z-index:200;background:var(--accent);color:#000;font-family:var(--mono);font-weight:700;font-size:13px;letter-spacing:.03em;border:none;border-radius:999px;padding:13px 28px;cursor:pointer;box-shadow:0 4px 24px rgba(232,96,10,.55);white-space:nowrap;opacity:0;pointer-events:none;transition:opacity .2s,transform .2s;transform:translateX(-50%) translateY(10px)}
+  .nav-float{position:fixed;bottom:24px;left:50%;z-index:200;background:var(--accent);color:#000;font-family:var(--mono);font-weight:700;font-size:13px;letter-spacing:.03em;border:none;border-radius:999px;padding:13px 28px;cursor:pointer;box-shadow:0 4px 24px rgba(232,96,10,.55);white-space:nowrap;opacity:0;pointer-events:none;transition:opacity .2s,transform .2s;transform:translateX(-50%) translateY(10px);text-decoration:none;display:inline-block;text-align:center}
   .nav-float.show{opacity:1;pointer-events:auto;transform:translateX(-50%) translateY(0)}
 
   /* checklist */
@@ -538,8 +538,14 @@ function rebadge(){
 }
 function syncNavBtn(){
   const btn=document.getElementById('navFloat');if(!btn)return;
-  if(selSlots.length){btn.textContent=`🧭 길찾기 (${selSlots.length}곳)`;btn.classList.add('show');}
-  else{btn.classList.remove('show');}
+  if(selSlots.length){
+    btn.textContent=`🧭 길찾기 (${selSlots.length}곳)`;
+    btn.href='https://www.google.com/maps/dir/'+selSlots.map(s=>s.loc[0]+','+s.loc[1]).join('/');
+    btn.classList.add('show');
+  }else{
+    btn.removeAttribute('href');
+    btn.classList.remove('show');
+  }
 }
 
 /* ---- itinerary render ---- */
@@ -628,11 +634,10 @@ if(selBtn)selBtn.addEventListener('click',()=>{
   if(!selectMode){selSlots.length=0;rebadge();syncNavBtn();}
 });
 const navFloat=document.getElementById('navFloat');
-if(navFloat)navFloat.addEventListener('click',()=>{
-  if(!selSlots.length)return;
-  const url='https://www.google.com/maps/dir/'+selSlots.map(s=>s.loc[0]+','+s.loc[1]).join('/');
-  let w=null;try{w=window.open(url,'_blank');}catch(e){}
-  if(!w){const a=document.createElement('a');a.href=url;a.target='_blank';a.rel='noopener';document.body.appendChild(a);a.click();a.remove();}
+if(navFloat)navFloat.addEventListener('click',e=>{
+  // href는 syncNavBtn()에서 설정됨 → 실제 링크 클릭이라 팝업 차단 없음.
+  // 선택이 없으면 이동 막기.
+  if(!selSlots.length){e.preventDefault();}
 });
 
 /* ---- modal / edit functions ---- */
@@ -886,7 +891,7 @@ if ('serviceWorker' in navigator) {
   window.addEventListener('load', () => navigator.serviceWorker.register('./sw.js'));
 }
 </script>
-<button class="nav-float" id="navFloat">🧭 길찾기</button>
+<a class="nav-float" id="navFloat" target="_blank" rel="noopener">🧭 길찾기</a>
 
 <div class="modal-overlay" id="modalOverlay">
   <div class="modal" onclick="event.stopPropagation()">

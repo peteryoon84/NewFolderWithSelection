@@ -1,4 +1,4 @@
-const V = 'v2';
+const V = 'v3';
 const CACHE = `natrang-${V}`;
 const TILES = `natrang-tiles-${V}`;
 const CDN   = `natrang-cdn-${V}`;
