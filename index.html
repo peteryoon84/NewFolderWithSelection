@@ -204,6 +204,7 @@
           <button id="saveMapBtn" class="save-btn">💾</button>
           <button id="editModeBtn" class="edit-mode-btn">✏️ 편집</button>
           <button id="selBtn" class="sel-btn">선택</button>
+          <button id="exportBtn" class="edit-mode-btn">📤 내보내기</button>
           <button id="toggleMap">지도 접기 ▴</button>
         </div>
       </div>
@@ -633,6 +634,19 @@ if(selBtn)selBtn.addEventListener('click',()=>{
   selBtn.textContent=selectMode?'취소':'선택';
   if(!selectMode){selSlots.length=0;rebadge();syncNavBtn();}
 });
+const exportBtn=document.getElementById('exportBtn');
+if(exportBtn)exportBtn.addEventListener('click',()=>{
+  const ta=document.getElementById('exportText');
+  ta.value='### 나트랑 일정 내보내기 (수정일: '+new Date().toLocaleString('ko-KR')+')\n'+JSON.stringify(LIVE_DATA,null,1);
+  document.getElementById('exportOverlay').classList.add('show');
+});
+const exportCopyBtn=document.getElementById('exportCopyBtn');
+if(exportCopyBtn)exportCopyBtn.addEventListener('click',()=>{
+  const ta=document.getElementById('exportText');ta.focus();ta.select();
+  const done=()=>{exportCopyBtn.textContent='✅ 복사됨!';setTimeout(()=>exportCopyBtn.textContent='📋 전체 복사',1500);};
+  if(navigator.clipboard&&navigator.clipboard.writeText){navigator.clipboard.writeText(ta.value).then(done).catch(()=>{try{document.execCommand('copy');done();}catch(e){}});}
+  else{try{document.execCommand('copy');done();}catch(e){}}
+});
 const navFloat=document.getElementById('navFloat');
 if(navFloat)navFloat.addEventListener('click',e=>{
   // href는 syncNavBtn()에서 설정됨 → 실제 링크 클릭이라 팝업 차단 없음.
@@ -892,6 +906,18 @@ if ('serviceWorker' in navigator) {
 }
 </script>
 <a class="nav-float" id="navFloat" target="_blank" rel="noopener">🧭 길찾기</a>
+
+<div class="modal-overlay" id="exportOverlay" onclick="if(event.target===this)this.classList.remove('show')">
+  <div class="modal" onclick="event.stopPropagation()">
+    <h3 style="margin:0 0 8px">📤 일정 내보내기</h3>
+    <p style="font-size:13px;color:var(--ink2);margin:0 0 10px;line-height:1.5">아래 텍스트 전체를 복사해서 Claude에게 붙여넣으면, 원본 파일에 영구 반영됩니다.</p>
+    <textarea id="exportText" readonly style="width:100%;height:200px;font-family:var(--mono);font-size:11px;background:var(--bg);color:var(--ink);border:1px solid var(--line);border-radius:8px;padding:10px;box-sizing:border-box;resize:vertical"></textarea>
+    <div style="display:flex;gap:8px;margin-top:10px">
+      <button id="exportCopyBtn" style="flex:1;background:var(--accent);color:#000;font-weight:700;border:none;border-radius:8px;padding:12px;cursor:pointer">📋 전체 복사</button>
+      <button onclick="document.getElementById('exportOverlay').classList.remove('show')" style="background:var(--card);color:var(--ink);border:1px solid var(--line);border-radius:8px;padding:12px 18px;cursor:pointer">닫기</button>
+    </div>
+  </div>
+</div>
 
 <div class="modal-overlay" id="modalOverlay">
   <div class="modal" onclick="event.stopPropagation()">
