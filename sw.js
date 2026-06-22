@@ -1,4 +1,4 @@
-const V = 'v1';
+const V = 'v2';
 const CACHE = `natrang-${V}`;
 const TILES = `natrang-tiles-${V}`;
 const CDN   = `natrang-cdn-${V}`;
@@ -42,6 +42,9 @@ self.addEventListener('fetch', e => {
     );
   } else if (['unpkg.com','cdn.jsdelivr.net','fonts.googleapis.com','fonts.gstatic.com'].some(h => url.hostname.includes(h))) {
     e.respondWith(networkFirst(CDN, e.request));
+  } else if (e.request.mode === 'navigate' || url.pathname.endsWith('/') || url.pathname.endsWith('index.html')) {
+    // 앱 본문(HTML): 네트워크 우선 → 최신 업데이트 즉시 반영, 오프라인이면 캐시 사용
+    e.respondWith(networkFirst(CACHE, e.request));
   } else {
     e.respondWith(caches.match(e.request).then(r => r || fetch(e.request)));
   }

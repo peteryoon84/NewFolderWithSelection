@@ -631,7 +631,8 @@ const navFloat=document.getElementById('navFloat');
 if(navFloat)navFloat.addEventListener('click',()=>{
   if(!selSlots.length)return;
   const url='https://www.google.com/maps/dir/'+selSlots.map(s=>s.loc[0]+','+s.loc[1]).join('/');
-  const a=document.createElement('a');a.href=url;a.target='_blank';a.rel='noopener';a.click();
+  let w=null;try{w=window.open(url,'_blank');}catch(e){}
+  if(!w){const a=document.createElement('a');a.href=url;a.target='_blank';a.rel='noopener';document.body.appendChild(a);a.click();a.remove();}
 });
 
 /* ---- modal / edit functions ---- */
