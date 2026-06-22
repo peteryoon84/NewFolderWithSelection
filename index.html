@@ -531,7 +531,7 @@ function syncNavBtn(){
 }
 
 /* ---- itinerary render ---- */
-let _mState={di:-1,si:-1,isNew:true,loc:null},curDay=0,_io=null;
+let _mState={di:-1,si:-1,isNew:true,loc:null,pendingLoc:null,pendingName:''},curDay=0,_io=null;
 function renderApp(){
   const appEl=document.getElementById('app'),nav=document.getElementById('days');
   appEl.innerHTML='';nav.innerHTML='';
@@ -600,31 +600,35 @@ if(navFloat)navFloat.addEventListener('click',()=>{
 });
 
 /* ---- modal / edit functions ---- */
+function _resetModalSearch(){
+  document.getElementById('mSearchQ').value='';
+  document.getElementById('mSrchRes').innerHTML='';
+  document.getElementById('mMapPreview').style.display='none';
+  const f=document.getElementById('mMapFrame');if(f)f.src='';
+}
 function openAddModal(di){
-  _mState={di,si:-1,isNew:true,loc:null};
+  _mState={di,si:-1,isNew:true,loc:null,pendingLoc:null,pendingName:''};
   document.getElementById('mTime').value='';
   document.getElementById('mEmoji').value='📍';
   document.getElementById('mTitle').value='';
   document.getElementById('mTag').value='';
   document.getElementById('mDesc').value='';
   document.getElementById('mCost').value='';
-  document.getElementById('mSearchQ').value='';
-  document.getElementById('mSrchRes').innerHTML='';
+  _resetModalSearch();
   document.getElementById('mLocChip').style.display='none';
   document.getElementById('mModalTtl').textContent='장소 추가';
   document.getElementById('modalOverlay').classList.add('show');
 }
 function openEditModal(di,si){
   const s=LIVE_DATA[di].slots[si];
-  _mState={di,si,isNew:false,loc:s.loc||null};
+  _mState={di,si,isNew:false,loc:s.loc||null,pendingLoc:null,pendingName:''};
   document.getElementById('mTime').value=s.t||'';
   document.getElementById('mEmoji').value=s.e||'📍';
   document.getElementById('mTitle').value=s.title||'';
   document.getElementById('mTag').value=s.tag||'';
   document.getElementById('mDesc').value=s.d||'';
   document.getElementById('mCost').value=s.cost||'';
-  document.getElementById('mSearchQ').value='';
-  document.getElementById('mSrchRes').innerHTML='';
+  _resetModalSearch();
   const chip=document.getElementById('mLocChip');
   if(s.loc){chip.textContent=`📍 ${s.loc[0].toFixed(5)}, ${s.loc[1].toFixed(5)}`;chip.style.display='block';}
   else{chip.style.display='none';}
@@ -649,27 +653,38 @@ function saveModal(){
 async function runSearch(){
   const q=document.getElementById('mSearchQ').value.trim();if(!q)return;
   const res=document.getElementById('mSrchRes');
+  document.getElementById('mMapPreview').style.display='none';
   res.innerHTML='<div style="color:var(--ink3);font-size:12px;padding:4px 0">검색 중...</div>';
   try{
-    const r=await fetch(`https://nominatim.openstreetmap.org/search?q=${encodeURIComponent(q+' Vietnam')}&format=json&limit=5`,{headers:{'Accept-Language':'ko,en'}});
+    const r=await fetch(`https://nominatim.openstreetmap.org/search?q=${encodeURIComponent(q)}&countrycodes=vn&format=json&limit=5`,{headers:{'Accept-Language':'ko,vi,en'}});
     const data=await r.json();
-    if(!data.length){res.innerHTML='<div style="color:var(--ink3);font-size:12px;padding:4px 0">결과 없음</div>';return;}
+    if(!data.length){res.innerHTML='<div style="color:var(--ink3);font-size:12px;padding:4px 0">결과 없음 — 다른 이름으로 검색해보세요</div>';return;}
     res.innerHTML='';
     data.forEach(item=>{
       const d=document.createElement('div');d.className='sr-item';
       const name=item.display_name.split(',').slice(0,3).join(', ');
       d.innerHTML=`<div class="sr-name">${name}</div><div class="sr-coord">${(+item.lat).toFixed(5)}, ${(+item.lon).toFixed(5)}</div>`;
       d.addEventListener('click',()=>{
-        _mState.loc=[+item.lat,+item.lon];
-        const chip=document.getElementById('mLocChip');
-        chip.textContent=`📍 ${(+item.lat).toFixed(5)}, ${(+item.lon).toFixed(5)} · ${item.display_name.split(',')[0]}`;
-        chip.style.display='block';
+        _mState.pendingLoc=[+item.lat,+item.lon];
+        _mState.pendingName=item.display_name.split(',')[0];
         res.querySelectorAll('.sr-item').forEach(e=>e.classList.remove('picked'));
         d.classList.add('picked');
+        const frame=document.getElementById('mMapFrame');
+        frame.src=`https://maps.google.com/maps?q=${item.lat},${item.lon}&z=16&output=embed`;
+        document.getElementById('mMapPreview').style.display='block';
       });
       res.appendChild(d);
     });
   }catch(e){res.innerHTML='<div style="color:#f87171;font-size:12px;padding:4px 0">검색 오류</div>';}
+}
+function confirmLoc(){
+  if(!_mState.pendingLoc)return;
+  _mState.loc=_mState.pendingLoc;
+  const chip=document.getElementById('mLocChip');
+  chip.textContent=`📍 ${_mState.loc[0].toFixed(5)}, ${_mState.loc[1].toFixed(5)} · ${_mState.pendingName}`;
+  chip.style.display='block';
+  document.getElementById('mMapPreview').style.display='none';
+  document.getElementById('mSrchRes').innerHTML='';
 }
 function confirmDel(di,si){
   if(!confirm(`"${LIVE_DATA[di].slots[si].title}"을(를) 삭제할까요?`))return;
@@ -789,8 +804,15 @@ if ('serviceWorker' in navigator) {
     <div class="form-row"><label>장소명 *</label><input id="mTitle" placeholder="장소·활동 이름"></div>
     <div class="form-row"><label>메모</label><textarea id="mDesc" placeholder="상세 설명 (선택)"></textarea></div>
     <div class="form-row"><label>비용</label><input id="mCost" placeholder="예) ≈ 30,000원 (선택)"></div>
-    <div class="form-row"><label>위치 검색</label><div class="srch-row"><input id="mSearchQ" placeholder="장소명 검색 (베트남 기준)" onkeydown="if(event.key==='Enter')runSearch()"><button class="srch-btn" onclick="runSearch()">검색</button></div></div>
+    <div class="form-row"><label>위치 검색</label><div class="srch-row"><input id="mSearchQ" placeholder="한국어·영어 검색 가능 (예: 빈펄리조트)" onkeydown="if(event.key==='Enter')runSearch()"><button class="srch-btn" onclick="runSearch()">검색</button></div></div>
     <div id="mSrchRes" class="srch-res"></div>
+    <div id="mMapPreview" style="display:none;margin:6px 0 2px">
+      <iframe id="mMapFrame" width="100%" height="180" frameborder="0" style="border:0;border-radius:8px;display:block" allowfullscreen loading="lazy"></iframe>
+      <div style="display:flex;gap:6px;margin-top:6px">
+        <button class="mbtn" style="flex:1;background:var(--bg3);border:1px solid var(--line);color:var(--ink)" onclick="window.open('https://www.google.com/maps/search/?api=1&query='+(_mState.pendingLoc?_mState.pendingLoc[0]+','+_mState.pendingLoc[1]:''),'_blank','noopener')">🗺 구글지도에서 크게 보기</button>
+        <button class="mbtn mbtn-save" style="flex:1" onclick="confirmLoc()">✅ 이 위치로 확정</button>
+      </div>
+    </div>
     <div id="mLocChip" class="loc-chip" style="display:none"></div>
     <div class="modal-btns">
       <button class="mbtn mbtn-reset" onclick="resetItinData()">↺ 전체 초기화</button>
