@@ -661,6 +661,7 @@ function _resetModalSearch(){
   document.getElementById('mMapPreview').style.display='none';
   const f=document.getElementById('mMapFrame');if(f)f.src='';
   const pw=document.getElementById('mPickWrap');if(pw)pw.style.display='none';
+  const ci=document.getElementById('mCoordIn');if(ci)ci.value='';
   _mState.pinLoc=null;
 }
 function openAddModal(di){
@@ -793,13 +794,47 @@ async function runSearch(){
     res.appendChild(d);
   });
 }
-/* ---- 지도에서 직접 핀 찍기 ---- */
-var _pickMap=null,_pickMarker=null;
+/* ---- ① 구글지도에서 좌표 가져오기 ---- */
+function openGmapForPick(){
+  const q=document.getElementById('mSearchQ').value.trim();
+  const c=_mState.loc||_mState.pendingLoc||NT_CENTER;
+  const url=q?`https://www.google.com/maps/search/${encodeURIComponent(q)}/@${c[0]},${c[1]},16z`
+            :`https://www.google.com/maps/@${c[0]},${c[1]},16z`;
+  const a=document.createElement('a');a.href=url;a.target='_blank';a.rel='noopener';document.body.appendChild(a);a.click();a.remove();
+}
+function confirmCoord(){
+  const raw=(document.getElementById('mCoordIn').value||'').trim();
+  const m=raw.match(/(-?\d+(?:\.\d+)?)\s*[,\s]\s*(-?\d+(?:\.\d+)?)/);
+  if(!m){alert('좌표 형식이 올바르지 않아요.\n예) 12.24470, 109.19580');return;}
+  const lat=parseFloat(m[1]),lon=parseFloat(m[2]);
+  if(!(lat>=-90&&lat<=90&&lon>=-180&&lon<=180)){alert('좌표 범위가 올바르지 않아요.');return;}
+  if(lat<8||lat>24||lon<102||lon>110){
+    if(!confirm('베트남(나트랑) 범위를 벗어난 것 같아요.\n위도·경도 순서가 맞나요? 그대로 저장할까요?'))return;
+  }
+  _mState.loc=[lat,lon];_mState.pendingLoc=[lat,lon];_mState.pendingName='좌표 직접 입력';
+  const chip=document.getElementById('mLocChip');
+  chip.textContent=`📍 ${lat.toFixed(5)}, ${lon.toFixed(5)} · 좌표 직접 입력`;
+  chip.style.display='block';
+  const frame=document.getElementById('mMapFrame');
+  frame.src=`https://maps.google.com/maps?q=${lat},${lon}&z=16&output=embed`;
+  document.getElementById('mMapPreview').style.display='block';
+  document.getElementById('mPickWrap').style.display='none';
+  document.getElementById('mSrchRes').innerHTML='';
+}
+/* ---- ② 앱 지도에서 직접 핀 찍기 (위성 토글 포함) ---- */
+var _pickMap=null,_pickMarker=null,_pickBase=null,_pickSat=null,_pickLabels=null,_pickIsSat=false;
 function _setPin(ll){
   _mState.pinLoc=[ll[0],ll[1]];
   if(_pickMarker)_pickMarker.setLatLng(ll);
   const c=document.getElementById('mPickCoord');
   if(c)c.textContent=`📍 ${ll[0].toFixed(5)}, ${ll[1].toFixed(5)}`;
+}
+function togglePickLayer(){
+  if(!_pickMap)return;
+  _pickIsSat=!_pickIsSat;
+  if(_pickIsSat){_pickMap.removeLayer(_pickBase);_pickSat.addTo(_pickMap);_pickLabels.addTo(_pickMap);}
+  else{_pickMap.removeLayer(_pickSat);_pickMap.removeLayer(_pickLabels);_pickBase.addTo(_pickMap);}
+  const b=document.getElementById('mPickLayerBtn');if(b)b.textContent=_pickIsSat?'🗺 일반 지도로':'🛰 위성으로 보기';
 }
 function togglePickMap(){
   const wrap=document.getElementById('mPickWrap');
@@ -811,7 +846,10 @@ function togglePickMap(){
   const zoom=(_mState.loc||_mState.pendingLoc)?16:13;
   if(!_pickMap){
     _pickMap=L.map('mPickMap',{zoomControl:true,attributionControl:false}).setView(start,zoom);
-    L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png',{subdomains:'abcd',maxZoom:19}).addTo(_pickMap);
+    _pickBase=L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png',{subdomains:'abcd',maxZoom:19});
+    _pickSat=L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}',{maxZoom:19});
+    _pickLabels=L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/Reference/World_Boundaries_and_Places/MapServer/tile/{z}/{y}/{x}',{maxZoom:19});
+    _pickBase.addTo(_pickMap);
     _pickMarker=L.marker(start,{draggable:true}).addTo(_pickMap);
     _pickMarker.on('dragend',()=>{const p=_pickMarker.getLatLng();_setPin([p.lat,p.lng]);});
     _pickMap.on('click',e=>_setPin([e.latlng.lat,e.latlng.lng]));
@@ -1029,7 +1067,13 @@ if ('serviceWorker' in navigator) {
       <div class="form-row" style="flex:0 0 110px"><label>체류시간(분)</label><input id="mDwell" type="number" inputmode="numeric" placeholder="예) 90"></div>
     </div>
     <div class="form-row"><label>위치 검색</label><div class="srch-row"><input id="mSearchQ" placeholder="상호·주소 검색 (예: 데이지블룸, 빈펄리조트)" onkeydown="if(event.key==='Enter')runSearch()"><button class="srch-btn" onclick="runSearch()">검색</button></div></div>
-    <button type="button" class="srch-btn" style="width:100%;margin-bottom:6px" onclick="togglePickMap()">📍 지도에서 직접 핀 찍기</button>
+    <div style="background:var(--card);border:1px solid rgba(232,96,10,.35);border-radius:10px;padding:10px;margin-bottom:6px">
+      <div style="font-size:11px;color:var(--accent);font-family:var(--mono);margin-bottom:6px;font-weight:700">📌 구글지도에서 좌표 가져오기 · 가장 정확</div>
+      <div style="font-size:11px;color:var(--ink2);line-height:1.6;margin-bottom:8px">① 아래 버튼으로 <b>구글지도</b> 열기 → ② 정확한 위치를 <b>꾹 눌러</b> 핀 찍기 → ③ 화면에 나오는 <b>좌표 숫자를 복사</b> → ④ 돌아와서 아래에 붙여넣기</div>
+      <button type="button" class="srch-btn" style="width:100%;margin-bottom:6px" onclick="openGmapForPick()">🗺 구글지도 열어서 위치 찾기</button>
+      <div class="srch-row"><input id="mCoordIn" placeholder="좌표 붙여넣기 (예: 12.24470, 109.19580)" onkeydown="if(event.key==='Enter'){confirmCoord();}"><button class="srch-btn mbtn-save" style="color:#000" onclick="confirmCoord()">확정</button></div>
+    </div>
+    <button type="button" class="srch-btn" style="width:100%;margin-bottom:6px" onclick="togglePickMap()">📍 앱 지도에서 직접 핀 찍기</button>
     <div id="mSrchRes" class="srch-res"></div>
     <div id="mMapPreview" style="display:none;margin:6px 0 2px">
       <iframe id="mMapFrame" width="100%" height="180" frameborder="0" style="border:0;border-radius:8px;display:block" allowfullscreen loading="lazy"></iframe>
@@ -1039,6 +1083,7 @@ if ('serviceWorker' in navigator) {
       </div>
     </div>
     <div id="mPickWrap" style="display:none;margin:6px 0 2px">
+      <div style="display:flex;gap:6px;margin-bottom:5px"><button type="button" id="mPickLayerBtn" class="srch-btn" style="flex:1" onclick="togglePickLayer()">🛰 위성으로 보기</button></div>
       <div style="font-size:11px;color:var(--ink3);margin-bottom:5px;font-family:var(--mono)">지도를 탭하거나 핀을 끌어서 위치를 지정하세요</div>
       <div id="mPickMap" style="height:230px;border-radius:8px;overflow:hidden;border:1px solid var(--line)"></div>
       <div id="mPickCoord" style="font-family:var(--mono);font-size:10px;color:var(--ink3);margin-top:5px"></div>
