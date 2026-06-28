@@ -731,15 +731,37 @@ async function _searchPhoton(q){
     return {name:parts.slice(0,3).join(', ')||(p.name||'(이름 없음)'),full:parts.join(', '),lat:c[1],lon:c[0],src:'POI'};
   });
 }
+// 너무 구체적인 주소(번지+콤마)는 빈 결과가 나기 쉬워 → 단순화 변형을 순서대로 생성
+function _buildQueries(raw){
+  const q=raw.trim();const out=[q];
+  const noNum=q.replace(/^\s*\d+[\/\-\d]*\s*/,'').trim(); // 앞 번지 제거
+  if(noNum&&noNum!==q)out.push(noNum);
+  const base=noNum||q;
+  let street=base.split(',')[0].trim();                  // 첫 구간(거리/상호)
+  if(street){
+    let s=/nha\s*trang/i.test(street)?street:street+' Nha Trang';
+    out.push(s);
+  }
+  if(!/nha\s*trang/i.test(q))out.push(q+' Nha Trang');
+  return out.filter((v,i)=>v&&out.indexOf(v)===i);
+}
+async function _geoQuery(q){
+  const r=await Promise.allSettled([_searchNominatim(q),_searchPhoton(q)]);
+  let list=[];r.forEach(x=>{if(x.status==='fulfilled')list=list.concat(x.value);});
+  return list.filter(it=>isFinite(it.lat)&&isFinite(it.lon));
+}
 async function runSearch(){
   const q=document.getElementById('mSearchQ').value.trim();if(!q)return;
   const res=document.getElementById('mSrchRes');
   document.getElementById('mMapPreview').style.display='none';
   document.getElementById('mPickWrap').style.display='none';
   res.innerHTML='<div style="color:var(--ink3);font-size:12px;padding:4px 0">검색 중...</div>';
-  // 두 소스를 동시에 조회 → 합쳐서 나트랑 근접순 정렬
-  const results=await Promise.allSettled([_searchNominatim(q),_searchPhoton(q)]);
-  let list=[];results.forEach(r=>{if(r.status==='fulfilled')list=list.concat(r.value);});
+  // 변형 쿼리를 순서대로 시도 → 결과 나오면 멈춤 (번지 과다지정 대응)
+  let list=[];
+  for(const cand of _buildQueries(q)){
+    try{list=await _geoQuery(cand);}catch(e){list=[];}
+    if(list.length)break;
+  }
   // 좌표 근접 중복 제거
   const seen=[],dedup=[];
   for(const it of list){
