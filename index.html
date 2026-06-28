@@ -660,6 +660,8 @@ function _resetModalSearch(){
   document.getElementById('mSrchRes').innerHTML='';
   document.getElementById('mMapPreview').style.display='none';
   const f=document.getElementById('mMapFrame');if(f)f.src='';
+  const pw=document.getElementById('mPickWrap');if(pw)pw.style.display='none';
+  _mState.pinLoc=null;
 }
 function openAddModal(di){
   _mState={di,si:-1,isNew:true,loc:null,pendingLoc:null,pendingName:''};
@@ -708,32 +710,103 @@ function saveModal(){
   saveItinData();closeModal();
   const saved=curDay;renderApp();setActive(saved);renderRoute(saved);
 }
+const NT_CENTER=[12.2388,109.1967];
+function _distKm(a,b){return _haversineKm(a,b);}
+async function _searchNominatim(q){
+  // 나트랑 주변(viewbox)을 우선하되, 그 밖 결과도 허용(bounded=0)
+  const vb='108.85,12.55,109.45,11.85';
+  const url=`https://nominatim.openstreetmap.org/search?q=${encodeURIComponent(q)}&format=json&limit=10&addressdetails=1&viewbox=${vb}&bounded=0&countrycodes=vn`;
+  const r=await fetch(url,{headers:{'Accept-Language':'ko,vi,en'}});
+  const data=await r.json();
+  return data.map(it=>({name:it.display_name.split(',').slice(0,3).join(', '),full:it.display_name,lat:+it.lat,lon:+it.lon,src:'OSM'}));
+}
+async function _searchPhoton(q){
+  // Photon은 상호·POI 검색에 강함. 나트랑 좌표로 근접 가중치.
+  const url=`https://photon.komoot.io/api/?q=${encodeURIComponent(q)}&lat=${NT_CENTER[0]}&lon=${NT_CENTER[1]}&limit=10`;
+  const r=await fetch(url);
+  const j=await r.json();
+  return (j.features||[]).map(f=>{
+    const p=f.properties||{},c=f.geometry.coordinates;
+    const parts=[p.name,p.street,p.district,p.city,p.state,p.country].filter(Boolean);
+    return {name:parts.slice(0,3).join(', ')||(p.name||'(이름 없음)'),full:parts.join(', '),lat:c[1],lon:c[0],src:'POI'};
+  });
+}
 async function runSearch(){
   const q=document.getElementById('mSearchQ').value.trim();if(!q)return;
   const res=document.getElementById('mSrchRes');
   document.getElementById('mMapPreview').style.display='none';
+  document.getElementById('mPickWrap').style.display='none';
   res.innerHTML='<div style="color:var(--ink3);font-size:12px;padding:4px 0">검색 중...</div>';
-  try{
-    const r=await fetch(`https://nominatim.openstreetmap.org/search?q=${encodeURIComponent(q)}&countrycodes=vn&format=json&limit=5`,{headers:{'Accept-Language':'ko,vi,en'}});
-    const data=await r.json();
-    if(!data.length){res.innerHTML='<div style="color:var(--ink3);font-size:12px;padding:4px 0">결과 없음 — 다른 이름으로 검색해보세요</div>';return;}
-    res.innerHTML='';
-    data.forEach(item=>{
-      const d=document.createElement('div');d.className='sr-item';
-      const name=item.display_name.split(',').slice(0,3).join(', ');
-      d.innerHTML=`<div class="sr-name">${name}</div><div class="sr-coord">${(+item.lat).toFixed(5)}, ${(+item.lon).toFixed(5)}</div>`;
-      d.addEventListener('click',()=>{
-        _mState.pendingLoc=[+item.lat,+item.lon];
-        _mState.pendingName=item.display_name.split(',')[0];
-        res.querySelectorAll('.sr-item').forEach(e=>e.classList.remove('picked'));
-        d.classList.add('picked');
-        const frame=document.getElementById('mMapFrame');
-        frame.src=`https://maps.google.com/maps?q=${item.lat},${item.lon}&z=16&output=embed`;
-        document.getElementById('mMapPreview').style.display='block';
-      });
-      res.appendChild(d);
+  // 두 소스를 동시에 조회 → 합쳐서 나트랑 근접순 정렬
+  const results=await Promise.allSettled([_searchNominatim(q),_searchPhoton(q)]);
+  let list=[];results.forEach(r=>{if(r.status==='fulfilled')list=list.concat(r.value);});
+  // 좌표 근접 중복 제거
+  const seen=[],dedup=[];
+  for(const it of list){
+    if(!isFinite(it.lat)||!isFinite(it.lon))continue;
+    if(seen.some(s=>Math.abs(s[0]-it.lat)<0.0006&&Math.abs(s[1]-it.lon)<0.0006))continue;
+    seen.push([it.lat,it.lon]);dedup.push(it);
+  }
+  dedup.forEach(it=>it._d=_distKm(NT_CENTER,[it.lat,it.lon]));
+  dedup.sort((a,b)=>a._d-b._d);
+  const top=dedup.slice(0,8);
+  if(!top.length){
+    res.innerHTML='<div style="color:var(--ink3);font-size:12px;padding:4px 0;line-height:1.6">결과 없음 😢<br>상호명이 지도 DB에 없을 수 있어요.<br>위의 <b>📍 지도에서 직접 핀 찍기</b>로 위치를 지정하세요.</div>';
+    return;
+  }
+  res.innerHTML='';
+  top.forEach(item=>{
+    const d=document.createElement('div');d.className='sr-item';
+    const far=item._d>40?` · ${item._d.toFixed(0)}km`:'';
+    d.innerHTML=`<div class="sr-name">${item.name} <span style="font-size:9px;color:var(--ink3)">[${item.src}${far}]</span></div><div class="sr-coord">${item.lat.toFixed(5)}, ${item.lon.toFixed(5)}</div>`;
+    d.addEventListener('click',()=>{
+      _mState.pendingLoc=[item.lat,item.lon];
+      _mState.pendingName=item.name.split(',')[0];
+      res.querySelectorAll('.sr-item').forEach(e=>e.classList.remove('picked'));
+      d.classList.add('picked');
+      const frame=document.getElementById('mMapFrame');
+      frame.src=`https://maps.google.com/maps?q=${item.lat},${item.lon}&z=16&output=embed`;
+      document.getElementById('mMapPreview').style.display='block';
     });
-  }catch(e){res.innerHTML='<div style="color:#f87171;font-size:12px;padding:4px 0">검색 오류</div>';}
+    res.appendChild(d);
+  });
+}
+/* ---- 지도에서 직접 핀 찍기 ---- */
+var _pickMap=null,_pickMarker=null;
+function _setPin(ll){
+  _mState.pinLoc=[ll[0],ll[1]];
+  if(_pickMarker)_pickMarker.setLatLng(ll);
+  const c=document.getElementById('mPickCoord');
+  if(c)c.textContent=`📍 ${ll[0].toFixed(5)}, ${ll[1].toFixed(5)}`;
+}
+function togglePickMap(){
+  const wrap=document.getElementById('mPickWrap');
+  if(wrap.style.display==='block'){wrap.style.display='none';return;}
+  if(typeof L==='undefined'){alert('지도를 불러올 수 없습니다 (오프라인일 수 있어요). 잠시 후 다시 시도하세요.');return;}
+  document.getElementById('mMapPreview').style.display='none';
+  wrap.style.display='block';
+  const start=_mState.loc||_mState.pendingLoc||NT_CENTER;
+  const zoom=(_mState.loc||_mState.pendingLoc)?16:13;
+  if(!_pickMap){
+    _pickMap=L.map('mPickMap',{zoomControl:true,attributionControl:false}).setView(start,zoom);
+    L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png',{subdomains:'abcd',maxZoom:19}).addTo(_pickMap);
+    _pickMarker=L.marker(start,{draggable:true}).addTo(_pickMap);
+    _pickMarker.on('dragend',()=>{const p=_pickMarker.getLatLng();_setPin([p.lat,p.lng]);});
+    _pickMap.on('click',e=>_setPin([e.latlng.lat,e.latlng.lng]));
+  }else{
+    _pickMap.setView(start,zoom);_pickMarker.setLatLng(start);
+  }
+  _setPin(start);
+  setTimeout(()=>{try{_pickMap.invalidateSize();}catch(e){}},80);
+}
+function confirmPin(){
+  if(!_mState.pinLoc){alert('지도를 탭해서 위치를 지정하세요.');return;}
+  _mState.loc=[_mState.pinLoc[0],_mState.pinLoc[1]];
+  const chip=document.getElementById('mLocChip');
+  chip.textContent=`📍 ${_mState.loc[0].toFixed(5)}, ${_mState.loc[1].toFixed(5)} · 지도에서 직접 지정`;
+  chip.style.display='block';
+  document.getElementById('mPickWrap').style.display='none';
+  document.getElementById('mMapPreview').style.display='none';
 }
 function confirmLoc(){
   if(!_mState.pendingLoc)return;
@@ -933,7 +1006,8 @@ if ('serviceWorker' in navigator) {
       <div class="form-row" style="flex:1"><label>비용</label><input id="mCost" placeholder="예) ≈ 30,000원"></div>
       <div class="form-row" style="flex:0 0 110px"><label>체류시간(분)</label><input id="mDwell" type="number" inputmode="numeric" placeholder="예) 90"></div>
     </div>
-    <div class="form-row"><label>위치 검색</label><div class="srch-row"><input id="mSearchQ" placeholder="한국어·영어 검색 가능 (예: 빈펄리조트)" onkeydown="if(event.key==='Enter')runSearch()"><button class="srch-btn" onclick="runSearch()">검색</button></div></div>
+    <div class="form-row"><label>위치 검색</label><div class="srch-row"><input id="mSearchQ" placeholder="상호·주소 검색 (예: 데이지블룸, 빈펄리조트)" onkeydown="if(event.key==='Enter')runSearch()"><button class="srch-btn" onclick="runSearch()">검색</button></div></div>
+    <button type="button" class="srch-btn" style="width:100%;margin-bottom:6px" onclick="togglePickMap()">📍 지도에서 직접 핀 찍기</button>
     <div id="mSrchRes" class="srch-res"></div>
     <div id="mMapPreview" style="display:none;margin:6px 0 2px">
       <iframe id="mMapFrame" width="100%" height="180" frameborder="0" style="border:0;border-radius:8px;display:block" allowfullscreen loading="lazy"></iframe>
@@ -941,6 +1015,12 @@ if ('serviceWorker' in navigator) {
         <button class="mbtn" style="flex:1;background:var(--bg3);border:1px solid var(--line);color:var(--ink)" onclick="window.open('https://www.google.com/maps/search/?api=1&query='+(_mState.pendingLoc?_mState.pendingLoc[0]+','+_mState.pendingLoc[1]:''),'_blank','noopener')">🗺 구글지도에서 크게 보기</button>
         <button class="mbtn mbtn-save" style="flex:1" onclick="confirmLoc()">✅ 이 위치로 확정</button>
       </div>
+    </div>
+    <div id="mPickWrap" style="display:none;margin:6px 0 2px">
+      <div style="font-size:11px;color:var(--ink3);margin-bottom:5px;font-family:var(--mono)">지도를 탭하거나 핀을 끌어서 위치를 지정하세요</div>
+      <div id="mPickMap" style="height:230px;border-radius:8px;overflow:hidden;border:1px solid var(--line)"></div>
+      <div id="mPickCoord" style="font-family:var(--mono);font-size:10px;color:var(--ink3);margin-top:5px"></div>
+      <button class="mbtn mbtn-save" style="width:100%;margin-top:6px" onclick="confirmPin()">✅ 이 핀 위치로 확정</button>
     </div>
     <div id="mLocChip" class="loc-chip" style="display:none"></div>
     <div class="modal-btns">
